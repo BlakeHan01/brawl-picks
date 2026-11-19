@@ -1,0 +1,11 @@
+{
+  "_note": "Current ranked map pool. Edit this list when the season rotates; names must match the in-game map names.",
+  "maps": [
+    "Center Stage", "Pinball Dreams", "Sneaky Fields", "Triple Dribble",
+    "Belle's Rock", "Flaring Phoenix", "Flowing Springs", "Goldarm Gulch", "New Horizons", "Out in the Open",
+    "Double Swoosh", "Gem Fort", "Hard Rock Mine", "Undermine",
+    "Dry Season", "Hideout", "Layer Cake", "Shooting Star",
+    "Bridge Too Far", "Hot Potato", "Kaboom Canyon", "Safe Zone",
+    "Dueling Beetles", "Open Business", "Parallel Plays", "Ring of Fire"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "brawl-picks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Best Brawl Stars brawlers for each map, searchable by map initials.",
+  "scripts": {
+    "data": "node scripts/fetch-data.mjs",
+    "dev": "node scripts/serve.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": { "node": ">=20" }
+}
