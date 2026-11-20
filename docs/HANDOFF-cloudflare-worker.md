@@ -8,6 +8,17 @@
 2. **Fresh map timers.** The site's rotation file is refreshed by a GitHub Actions schedule, which GitHub runs late or skips. On 2026-11-20 it went 3+ hours without a run, so 4 of 13 "live" events had already ended on the site. The Worker serves the rotation live (cached briefly) instead.
 3. **Reliable stats runs.** The stats crawl (~30k API calls, ~5 min) stays on GitHub Actions, but a Cloudflare Cron Trigger starts it on time via the GitHub API. GitHub's own schedule stays as a backup.
 
+## Must stay free
+
+The owner doesn't want to pay for anything. Use the **Cloudflare Workers Free plan** only: no paid plan, no Workers KV/D1/Durable Objects needed, no add-ons. The design fits the free limits:
+
+- 100,000 requests/day: responses are cached (player 60 s, rotation 120 s), and the site only calls on page load and every few minutes.
+- 10 ms CPU per request: the Worker only forwards one upstream call and reshapes JSON; waiting on the network doesn't count as CPU.
+- Cron triggers and subrequests: one cron, one upstream call per request.
+- If a limit is ever hit, the free plan rejects requests rather than billing; the site falls back to its static files.
+
+GitHub side is free too (public repo: Actions and Pages). Don't add anything that needs a credit card.
+
 ## What to build
 
 Put the code in `worker/` in this repo (`worker/src/index.js`, `worker/wrangler.toml`, tests). Plain JS, no framework needed.
