@@ -23,7 +23,7 @@ case "${1:-}" in
       # First run after the move: take the files from the last main commit that had them.
       : > "$PREV"
       git fetch -q --deepen=100 origin 2>/dev/null || true
-      gone=$(git rev-list -1 HEAD -- data/state.json || true)
+      gone=$(git rev-list -1 --first-parent HEAD -- data/state.json || true)
       if [ -n "$gone" ] && git archive "$gone^" "${PATHS[@]}" 2>/dev/null | tar -x; then
         echo "no data branch yet: seeded from main at ${gone:0:7}^"
       else
