@@ -194,6 +194,29 @@ async function main() {
   const logs = await pool(tags, 10, (t) => official(`/players/${encodeURIComponent(t)}/battlelog`));
   log(`battle logs read: ${logs.filter(Boolean).length}/${tags.length}`);
 
+  // Diagnostic: what the per-player brawler fields look like in Ranked vs trophy games.
+  if (process.env.DIAG) {
+    const hist = { r: {}, t: {} };
+    let sample = null;
+    for (const lg of logs) for (const it of listOf(lg)) {
+      const bt = it.battle || {};
+      const k = RANKED_TYPES.has(bt.type) ? 'r' : bt.type === 'ranked' ? 't' : null;
+      if (!k || !Array.isArray(bt.teams)) continue;
+      for (const p of bt.teams.flat()) {
+        const v = p.brawler?.trophies;
+        const b = k === 'r' ? v : Math.floor(v / 250) * 250;
+        hist[k][b] = (hist[k][b] || 0) + 1;
+        if (k === 'r' && !sample) sample = { battleKeys: Object.keys(bt), playerKeys: Object.keys(p), brawler: p.brawler, type: bt.type, mode: bt.mode, eventKeys: Object.keys(it.event || {}) };
+      }
+    }
+    log('DIAG ranked brawler.trophies histogram:', JSON.stringify(hist.r));
+    log('DIAG trophy-game brawler.trophies (bucket of 250):', JSON.stringify(hist.t));
+    log('DIAG ranked sample shape:', JSON.stringify(sample));
+    const types = {};
+    for (const lg of logs) for (const it of listOf(lg)) { const t = it.battle?.type || '(none)'; types[t] = (types[t] || 0) + 1; }
+    log('DIAG battle types:', JSON.stringify(types));
+  }
+
   // Merge into today's file (the job may run more than once a day).
   await mkdir(DAILY_DIR, { recursive: true });
   const date = new Date(started).toISOString().slice(0, 10);

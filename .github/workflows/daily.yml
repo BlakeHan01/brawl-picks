@@ -48,6 +48,8 @@ jobs:
         id: stats
         if: env.WANT_STATS == 'true'
         continue-on-error: true # keep serving the last good data if the pull fails
+        env:
+          DIAG: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
         run: node scripts/fetch-data.mjs
 
       - name: Commit changes
