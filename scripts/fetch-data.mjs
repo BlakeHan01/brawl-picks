@@ -37,7 +37,10 @@ const TOP_N = 20; // brawlers kept per map
 const MIN_MAP_BATTLES = 15; // fewer than this: map gets no picks
 const PREFER_RANKED = 40; // ranked-only stats once a map has this many ranked games
 const LOW_SAMPLE = 150; // below this the site labels the picks "few games"
-const MIN_BRAWLER_GAMES = 5;
+const MIN_BRAWLER_GAMES = 10;
+// Shrink toward 50% as if every brawler also had PRIOR_GAMES games at exactly 50%.
+// Picking the top 5 out of ~80 brawlers rewards luck; this keeps small samples from winning.
+const PRIOR_GAMES = 40;
 
 const readJSON = (p) => readFile(p, 'utf8').then(JSON.parse, () => null);
 const RANKED_TYPES = new Set(['soloRanked', 'teamRanked']);
@@ -140,14 +143,15 @@ export function buildMaps(days, rankedPool) {
         const excess = wS - gS * pS + (wO - gO * (1 - pS));
         return {
           id: Number(id),
-          wr: 100 * (0.5 + excess / g),
+          // estimated win % vs. an average pick: adjusted for skill, then shrunk toward 50%
+          wr: 100 * (0.5 + excess / (g + PRIOR_GAMES)),
           ur: (100 * g) / (2 * a.n), // % of teams that had this brawler
-          score: (100 * (0.5 * g + excess + 10)) / (g + 20), // shrink toward 50% with a 20-game prior
+          raw: 100 * (0.5 + excess / g),
           g,
         };
       })
       .filter((p) => p.g >= MIN_BRAWLER_GAMES)
-      .sort((x, y) => y.score - x.score)
+      .sort((x, y) => y.wr - x.wr)
       .slice(0, TOP_N);
     if (!picks.length) continue;
     maps.push({
@@ -162,8 +166,8 @@ export function buildMaps(days, rankedPool) {
       rankedGames: m.r.n,
       topSideWin: r1(100 * pS),
       low: a.n < LOW_SAMPLE,
-      // [brawlerId, adjusted win %, use %, score, games]
-      picks: picks.map((p) => [p.id, r1(p.wr), r1(p.ur), r1(p.score), p.g]),
+      // [brawlerId, estimated win %, use %, skill-adjusted win % before shrinking, games]
+      picks: picks.map((p) => [p.id, r1(p.wr), r1(p.ur), r1(p.raw), p.g]),
     });
   }
   return maps.sort((a, b) => a.name.localeCompare(b.name));

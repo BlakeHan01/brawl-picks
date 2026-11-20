@@ -84,7 +84,7 @@ test('buildMaps: ranked-only once enough ranked games, else mixed/trophy with lo
   assert.equal(hrm.ranked, true);
   assert.equal(hrm.low, true);
   assert.equal(hrm.mode, 'Gem Grab');
-  for (let i = 1; i < hrm.picks.length; i++) assert.ok(hrm.picks[i - 1][3] >= hrm.picks[i][3], 'sorted by score');
+  for (let i = 1; i < hrm.picks.length; i++) assert.ok(hrm.picks[i - 1][1] >= hrm.picks[i][1], 'sorted by estimate');
   assert.equal(hrm.picks[0][4], 100); // games column
   assert.equal(hrm.picks[0][2], 50); // in half of all teams
   const bz = maps.find((m) => m.name === 'Below Zero');
@@ -102,12 +102,14 @@ test('top players winning a lot does not inflate their picks', () => {
   const [m] = buildMaps([tally([{ items }], ['#P1'], 0)], new Set());
   const get = (id) => m.picks.find((p) => p[0] === id);
   assert.equal(m.topSideWin, 70.4); // 143 of 203 games won by the top player's side
-  assert.equal(get(1)[1], 59.6); // A: about 10 points better than the player's usual
-  assert.equal(get(2)[1], 39.6); // B: about 10 points worse, despite a 60% raw win rate
+  assert.equal(get(1)[3], 59.6); // A: about 10 points better than the player's usual
+  assert.equal(get(2)[3], 39.6); // B: about 10 points worse, despite a 60% raw win rate
+  assert.equal(get(1)[1], 56.8); // shown estimate: shrunk toward 50 with a 40-game prior
+  assert.equal(get(2)[1], 42.5);
   assert.ok(Math.abs(get(10)[1] - 50) < 0.1, 'teammates on every game: neutral');
   assert.ok(Math.abs(get(20)[1] - 50) < 0.1, 'enemies on every game: neutral');
   assert.equal(m.picks[0][0], 1);
-  assert.ok(!get(99), 'under 5 games: not listed');
+  assert.ok(!get(99), 'under 10 games: not listed');
 });
 
 test('parseRotation turns API slots into ISO times', () => {

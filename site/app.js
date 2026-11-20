@@ -184,7 +184,7 @@ function renderMap(m) {
   }
   const top = m.picks.slice(0, 5);
   const rest = m.picks.slice(5);
-  const hi = m.picks[0][3], lo = m.picks[m.picks.length - 1][3];
+  const hi = m.picks[0][1], lo = m.picks[m.picks.length - 1][1];
   const bar = (s) => 12 + (88 * (s - lo)) / Math.max(0.1, hi - lo);
   const B = DATA.brawlers;
   mapView.innerHTML = head + `
@@ -198,14 +198,14 @@ function renderMap(m) {
         <span class="ur">${pct(ur)} picked</span>
         <span class="ur">${n(g)} games</span>
       </li>`).join('')}</ol>
-    <p class="legend"><b>Win %</b> is adjusted for player skill. The top players we sample won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won, and 50% means average. <b>Picked</b> is the share of teams that played it. Brawlers with few games are pulled toward 50% so they can't jump to the top.</p>
+    <p class="legend"><b>Win %</b> is an estimate against an average pick, where 50% is average. It's adjusted for skill: the top players we sample won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won. Brawlers with few games are pulled toward 50% so luck can't put them on top. <b>Picked</b> is the share of teams that played it.</p>
     ${rest.length ? `<h2>Also strong <small>ranks 6–${m.picks.length}</small></h2>
-    <ul class="rest">${rest.map(([id, wr, ur, s, g], i) => `
+    <ul class="rest">${rest.map(([id, wr, ur, , g], i) => `
       <li>
         <span class="rk">${i + 6}</span>
         ${av(id, 'sq')}
         <span class="rn"><b>${esc(B[id]?.n)}</b><span>${pct(ur)} picked · ${n(g)} games</span></span>
-        <span class="barwrap"><span class="bar" style="width:${bar(s).toFixed(0)}%"></span></span>
+        <span class="barwrap"><span class="bar" style="width:${bar(wr).toFixed(0)}%"></span></span>
         <span class="wr">${pct(wr)}</span>
       </li>`).join('')}</ul>` : ''}`;
 }
