@@ -72,6 +72,13 @@ export const MODE_INFO = {
   hotZone: ['Hot Zone', '#e33b50'],
   wipeout: ['Wipeout', '#3fb4ff'],
   brawlHockey: ['Brawl Hockey', '#4fd1e8'],
+  airHockey: ['Air Hockey', '#4fd1e8'],
+  brawlArena: ['Brawl Arena', '#c94fe0'],
+  deathmatch: ['Deathmatch', '#e84f6a'],
+  deathmatch5V5: ['Deathmatch 5v5', '#e84f6a'],
+  treasureHunt: ['Treasure Hunt', '#e8c84f'],
+  bombHeist: ['Bomb Heist', '#d65cd3'],
+  killConfirmed: ['Kill Confirmed', '#e8704f'],
   basketBrawl: ['Basket Brawl', '#ff9a3c'],
   volleyBrawl: ['Volley Brawl', '#ffd23c'],
   payload: ['Payload', '#e5b53a'],
@@ -92,8 +99,10 @@ export const RANKED_MODES = new Set(['gemGrab', 'brawlBall', 'heist', 'bounty', 
 
 export function modeName(id) {
   if (MODE_INFO[id]) return MODE_INFO[id][0];
-  return String(id || 'Unknown').replace(/([a-z])([A-Z0-9])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+  return String(id || 'Unknown').replace(/(\d)V(\d)/g, '$1v$2').replace(/([a-z])([A-Z]|\d+v\d+)/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
 }
+// Modes with no fixed teams: the site has no picks for these.
+export const isSoloMode = (id) => /showdown|duels|bossFight|roboRumble|bigGame/i.test(String(id));
 export const modeColor = (id) => MODE_INFO[id]?.[1] || '#9a8fc0';
 
 // ---------- images (self-hosted copies of Brawlify CDN art) ----------

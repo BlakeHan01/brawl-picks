@@ -58,7 +58,7 @@ async function load() {
   for (const e of ROT.events) {
     if (e.id == null || have.has(String(e.id))) continue;
     have.add(String(e.id));
-    MAPS.push({ id: String(e.id), name: e.map, mode: e.mode, modeColor: e.modeColor, img: e.img, ranked: false, picks: [] });
+    MAPS.push({ id: String(e.id), name: e.map, mode: e.mode, modeColor: e.modeColor, img: e.img, solo: !!e.solo, ranked: false, picks: [] });
   }
   mapsById = new Map(MAPS.map((m) => [m.id, m]));
   for (const m of MAPS) m.ini = initials(m.name);
@@ -177,7 +177,9 @@ function renderMap(m) {
       </div>
     </div>`;
   if (!m.picks.length) {
-    mapView.innerHTML = head + `<p class="empty">Not enough high-skill games on this map yet. Picks appear once top players have played it ${n(15)}+ times.</p>`;
+    mapView.innerHTML = head + (m.solo
+      ? `<p class="empty">Picks are only worked out for team modes. ${esc(m.mode)} isn't covered yet.</p>`
+      : `<p class="empty">Not enough high-skill games on this map yet. Picks appear once top players have played it ${n(15)}+ times.</p>`);
     return;
   }
   const top = m.picks.slice(0, 5);
@@ -196,7 +198,7 @@ function renderMap(m) {
         <span class="ur">${pct(ur)} picked</span>
         <span class="ur">${n(g)} games</span>
       </li>`).join('')}</ol>
-    <p class="legend"><b>Win %</b> is the raw win rate on this map. <b>Picked</b> is the share of teams that played the brawler. Order uses win rate adjusted for game count, so a brawler with few games can't jump to the top.</p>
+    <p class="legend"><b>Win %</b> is adjusted for player skill. The top players we sample won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won, and 50% means average. <b>Picked</b> is the share of teams that played it. Brawlers with few games are pulled toward 50% so they can't jump to the top.</p>
     ${rest.length ? `<h2>Also strong <small>ranks 6–${m.picks.length}</small></h2>
     <ul class="rest">${rest.map(([id, wr, ur, s, g], i) => `
       <li>

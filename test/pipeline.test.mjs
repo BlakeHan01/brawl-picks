@@ -50,8 +50,9 @@ test('tally keeps ranked + high-trophy games and drops the rest', () => {
   const m = d.maps['gemGrab|hardrockmine'];
   assert.equal(m.r.n, 2);
   assert.equal(m.t.n, 1);
-  assert.deepEqual(m.r.b[16000000], [2, 2]); // my brawler won both
-  assert.deepEqual(m.r.b[16000003], [2, 0]); // enemy lost both
+  assert.deepEqual(m.r.b[16000000], [2, 2, 0, 0]); // on my side, won both
+  assert.deepEqual(m.r.b[16000003], [0, 0, 2, 0]); // other side, lost both
+  assert.equal(m.r.sw, 2);
 });
 
 test('tally de-duplicates games seen from both sides and respects the cutoff', () => {
@@ -92,14 +93,21 @@ test('buildMaps: ranked-only once enough ranked games, else mixed/trophy with lo
   assert.equal(bz.mode, 'Brawl Hockey');
 });
 
-test('a brawler with few games does not outrank a proven one', () => {
+test('top players winning a lot does not inflate their picks', () => {
   const items = [];
-  // brawler 99 wins 3/3; brawler 16000000 wins 70/100
-  for (let i = 0; i < 100; i++) items.push(battle('#P1', i, { win: i % 10 < 7 }));
-  for (let i = 0; i < 3; i++) items.push(battle('#P1', 500 + i, { brawlers: [99, 98, 97, 96, 95, 94] }));
+  // The sampled player wins 80% with brawler A and 60% with B (70% overall), same teammates and enemies.
+  for (let i = 0; i < 100; i++) items.push(battle('#P1', i, { brawlers: [1, 10, 11, 20, 21, 22], win: i % 10 < 8 }));
+  for (let i = 0; i < 100; i++) items.push(battle('#P1', 200 + i, { brawlers: [2, 10, 11, 20, 21, 22], win: i % 10 < 6 }));
+  for (let i = 0; i < 3; i++) items.push(battle('#P1', 500 + i, { brawlers: [99, 10, 11, 20, 21, 22] }));
   const [m] = buildMaps([tally([{ items }], ['#P1'], 0)], new Set());
-  assert.equal(m.picks[0][0], 16000000);
-  assert.ok(!m.picks.some((p) => p[0] === 99), 'under 5 games: not listed');
+  const get = (id) => m.picks.find((p) => p[0] === id);
+  assert.equal(m.topSideWin, 70.4); // 143 of 203 games won by the top player's side
+  assert.equal(get(1)[1], 59.6); // A: about 10 points better than the player's usual
+  assert.equal(get(2)[1], 39.6); // B: about 10 points worse, despite a 60% raw win rate
+  assert.ok(Math.abs(get(10)[1] - 50) < 0.1, 'teammates on every game: neutral');
+  assert.ok(Math.abs(get(20)[1] - 50) < 0.1, 'enemies on every game: neutral');
+  assert.equal(m.picks[0][0], 1);
+  assert.ok(!get(99), 'under 5 games: not listed');
 });
 
 test('parseRotation turns API slots into ISO times', () => {
@@ -112,6 +120,8 @@ test('parseRotation turns API slots into ISO times', () => {
   assert.equal(r[0].map, 'Hard Rock Mine');
   assert.equal(r[1].end, '2026-11-21T08:00:00.000Z');
   assert.equal(r[1].mode, 'Brawl Hockey');
+  assert.equal(r[1].solo, false);
+  assert.equal(parseRotation([{ endTime: '20261121T080000.000Z', event: { id: 1, mode: 'soloShowdown', map: 'Truth' } }])[0].solo, true);
 });
 
 // ---------- end to end ----------

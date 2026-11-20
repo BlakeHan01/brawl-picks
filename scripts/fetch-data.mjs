@@ -41,9 +41,12 @@ const MIN_BRAWLER_GAMES = 5;
 
 const readJSON = (p) => readFile(p, 'utf8').then(JSON.parse, () => null);
 const RANKED_TYPES = new Set(['soloRanked', 'teamRanked']);
+// Per map and tier: n games, sw = games won by the sampled (top) player's side,
+// b[brawlerId] = [games, wins] on the sampled side, then [games, wins] on the other side.
+const blank = () => ({ n: 0, sw: 0, b: {} });
 
 // ---------- 1. sample today's games ----------
-export function tally(logs, tags, cutoff, day = { battles: { ranked: 0, trophy: 0, skippedLowTrophy: 0 }, maps: {} }) {
+export function tally(logs, tags, cutoff, day = { v: 2, battles: { ranked: 0, trophy: 0, skippedLowTrophy: 0 }, maps: {} }) {
   const seen = new Set();
   for (let i = 0; i < logs.length; i++) {
     for (const it of listOf(logs[i])) {
@@ -74,17 +77,20 @@ export function tally(logs, tags, cutoff, day = { battles: { ranked: 0, trophy: 
       seen.add(key);
 
       const mk = `${mode}|${nameKey(ev.map)}`;
-      const m = (day.maps[mk] ||= { id: ev.id ?? null, name: ev.map, mode, r: { n: 0, b: {} }, t: { n: 0, b: {} } });
+      const m = (day.maps[mk] ||= { id: ev.id ?? null, name: ev.map, mode, r: blank(), t: blank() });
       if (ev.id && !m.id) m.id = ev.id;
       const a = m[tier];
+      const mineWon = bt.result === 'victory';
       a.n++;
+      if (mineWon) a.sw++;
       day.battles[tier === 'r' ? 'ranked' : 'trophy']++;
       teams.forEach((team, ti) => {
-        const won = (ti === mine) === (bt.result === 'victory');
+        const side = ti === mine ? 0 : 2; // [games, wins] on the sampled player's side, then the other side
+        const won = (ti === mine) === mineWon;
         for (const p of team) {
-          const s = (a.b[p.brawler.id] ||= [0, 0]);
-          s[0]++;
-          if (won) s[1]++;
+          const s = (a.b[p.brawler.id] ||= [0, 0, 0, 0]);
+          s[side]++;
+          if (won) s[side + 1]++;
         }
       });
     }
@@ -95,18 +101,23 @@ export function tally(logs, tags, cutoff, day = { battles: { ranked: 0, trophy: 
 // ---------- 2. combine the window ----------
 const r1 = (x) => Math.round(x * 10) / 10;
 
+// Top players win most of their games, so raw win rates flatter whatever they pick.
+// Each brawler is measured against how often its side won on this map instead:
+// excess = wins above what that side's average would give. adjusted win % = 50 + excess per game.
 export function buildMaps(days, rankedPool) {
   const sum = new Map();
   const add = (into, from) => {
     into.n += from.n;
-    for (const [id, [g, w]] of Object.entries(from.b)) {
-      const s = (into.b[id] ||= [0, 0]);
-      s[0] += g; s[1] += w;
+    into.sw += from.sw;
+    for (const [id, v] of Object.entries(from.b)) {
+      const s = (into.b[id] ||= [0, 0, 0, 0]);
+      for (let k = 0; k < 4; k++) s[k] += v[k];
     }
   };
   for (const d of days) {
     for (const [k, m] of Object.entries(d.maps)) {
-      const x = sum.get(k) || { id: m.id, name: m.name, mode: m.mode, r: { n: 0, b: {} }, t: { n: 0, b: {} } };
+      if (!m.r || m.r.sw === undefined) continue; // file from an older format
+      const x = sum.get(k) || { id: m.id, name: m.name, mode: m.mode, r: blank(), t: blank() };
       if (m.id && !x.id) x.id = m.id;
       add(x.r, m.r); add(x.t, m.t);
       sum.set(k, x);
@@ -119,18 +130,23 @@ export function buildMaps(days, rankedPool) {
     if (m.r.n >= PREFER_RANKED) { basis = 'ranked'; a = m.r; }
     else {
       basis = m.r.n ? 'mixed' : 'trophy';
-      a = { n: 0, b: {} }; add(a, m.r); add(a, m.t);
+      a = blank(); add(a, m.r); add(a, m.t);
     }
     if (a.n < MIN_MAP_BATTLES) continue;
+    const pS = a.sw / a.n; // how often the top players' side won here
     const picks = Object.entries(a.b)
-      .filter(([, [g]]) => g >= MIN_BRAWLER_GAMES)
-      .map(([id, [g, w]]) => ({
-        id: Number(id),
-        wr: (100 * w) / g,
-        ur: (100 * g) / (2 * a.n), // % of teams that had this brawler
-        score: (100 * (w + 10)) / (g + 20), // shrink toward 50% with a 20-game prior
-        g,
-      }))
+      .map(([id, [gS, wS, gO, wO]]) => {
+        const g = gS + gO;
+        const excess = wS - gS * pS + (wO - gO * (1 - pS));
+        return {
+          id: Number(id),
+          wr: 100 * (0.5 + excess / g),
+          ur: (100 * g) / (2 * a.n), // % of teams that had this brawler
+          score: (100 * (0.5 * g + excess + 10)) / (g + 20), // shrink toward 50% with a 20-game prior
+          g,
+        };
+      })
+      .filter((p) => p.g >= MIN_BRAWLER_GAMES)
       .sort((x, y) => y.score - x.score)
       .slice(0, TOP_N);
     if (!picks.length) continue;
@@ -144,8 +160,9 @@ export function buildMaps(days, rankedPool) {
       basis,
       sample: a.n,
       rankedGames: m.r.n,
+      topSideWin: r1(100 * pS),
       low: a.n < LOW_SAMPLE,
-      // [brawlerId, win %, use %, score, games]
+      // [brawlerId, adjusted win %, use %, score, games]
       picks: picks.map((p) => [p.id, r1(p.wr), r1(p.ur), r1(p.score), p.g]),
     });
   }
@@ -177,7 +194,8 @@ async function main() {
   await mkdir(DAILY_DIR, { recursive: true });
   const date = new Date(started).toISOString().slice(0, 10);
   const dayFile = join(DAILY_DIR, `${date}.json`);
-  const day = tally(logs, tags, state.lastRun ? Date.parse(state.lastRun) : 0, (await readJSON(dayFile)) || undefined);
+  const prevDay = await readJSON(dayFile);
+  const day = tally(logs, tags, state.lastRun ? Date.parse(state.lastRun) : 0, prevDay?.v === 2 ? prevDay : undefined);
   day.date = date;
   log(`today: ${day.battles.ranked} ranked + ${day.battles.trophy} high-trophy games (${day.battles.skippedLowTrophy} low-trophy games skipped)`);
   await writeFile(dayFile, JSON.stringify(day));
@@ -205,7 +223,7 @@ async function main() {
   await pool(maps, 8, async (m) => { m.img = typeof m.id === 'number' ? await ensureImage('maps', m.id) : null; });
   for (const m of maps) m.picks = m.picks.filter((p) => B[p[0]]);
 
-  const totals = days.reduce((s, d) => ({ ranked: s.ranked + d.battles.ranked, trophy: s.trophy + d.battles.trophy }), { ranked: 0, trophy: 0 });
+  const totals = days.filter((d) => d.v === 2).reduce((s, d) => ({ ranked: s.ranked + d.battles.ranked, trophy: s.trophy + d.battles.trophy }), { ranked: 0, trophy: 0 });
   const data = {
     generatedAt: new Date().toISOString(),
     window: { days: days.length, from: keep[0]?.slice(0, 10), to: date },

@@ -7,7 +7,7 @@
 
 import { writeFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { ROOT, BS_KEY, log, official, listOf, parseTime, modeName, modeColor, ensureImage } from './lib.mjs';
+import { ROOT, BS_KEY, log, official, listOf, parseTime, modeName, modeColor, isSoloMode, ensureImage } from './lib.mjs';
 
 const OUT = resolve(ROOT, process.env.OUT || 'site/data/rotation.json');
 
@@ -25,6 +25,7 @@ export function parseRotation(j) {
         modeId: ev.mode,
         mode: modeName(ev.mode),
         modeColor: modeColor(ev.mode),
+        solo: isSoloMode(ev.mode),
         modifiers: ev.modifiers || [],
         start: Number.isFinite(start) ? new Date(start).toISOString() : null,
         end: new Date(end).toISOString(),
