@@ -178,19 +178,21 @@ function build(id, small = false) {
   const b = DATA.brawlers[id]?.b;
   if (!b) return '';
   const I = DATA.items || {};
-  const icon = (itemId, tip) => {
+ const icon = (itemId, tip, close) => {
     const it = I[itemId];
     if (!it?.img) return '';
     const t = `${tip}: ${it.n}`;
-    return `<span class="bi" tabindex="0" role="img" aria-label="${esc(t)}" data-tip="${esc(t)}"><img src="${esc(it.img)}" alt="" loading="lazy"></span>`;
+    return `<span class="bi${close ? ' close' : ''}" tabindex="0" role="img" aria-label="${esc(t)}" data-tip="${esc(t)}"><img src="${esc(it.img)}" alt="" loading="lazy"></span>`;
   };
-  const why = (x, what) => ` · ${Math.round(x[1])}% of ${x[2]} Legendary+ players ${what}`;
+  const why = (x, what) => x[3]
+    ? ` · ${Math.round(x[1])}% of ${x[2]} Legendary+ players ${what}`
+    : ` · close call: ${Math.round(x[1])}% vs ${Math.round(x[4])}% of ${x[2]} Legendary+ players`;
   const parts = [];
-  if (b.sp) parts.push(icon(b.sp[0], 'Star power').replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.sp, 'chose it first'))}"`));
-  if (b.gad) parts.push(icon(b.gad[0], 'Gadget').replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.gad, 'chose it first'))}"`));
+  if (b.sp) parts.push(icon(b.sp[0], 'Star power', !b.sp[3]).replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.sp, 'chose it first'))}"`));
+  if (b.gad) parts.push(icon(b.gad[0], 'Gadget', !b.gad[3]).replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.gad, 'chose it first'))}"`));
   if (b.gear) {
     const names = b.gear[0].map((g) => I[g]?.n).filter(Boolean).join(' + ');
-    for (const g of b.gear[0]) parts.push(icon(g, 'Gear').replace(/data-tip="([^"]*)"/, () => `data-tip="${esc(`Gears: ${names}${why(b.gear, 'run this pair')}`)}"`));
+    for (const g of b.gear[0]) parts.push(icon(g, 'Gear', !b.gear[3]).replace(/data-tip="([^"]*)"/, () => `data-tip="${esc(`Gears: ${names}${why(b.gear, 'run this pair')}`)}"`));
   }
   const html = parts.filter(Boolean).join('');
   return html ? `<span class="build${small ? ' sm' : ''}">${html}</span>` : '';

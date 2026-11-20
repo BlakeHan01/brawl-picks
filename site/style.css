@@ -137,6 +137,7 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .rn b .cls, .rn b .build { display: inline-flex; gap: 3px; align-items: center; margin: 3px 0 1px; }
 .build.sm { margin: 0 0 0 4px; vertical-align: middle; }
 .bi { position: relative; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--panel2); cursor: help; outline-offset: 1px; }
+.bi.close { outline: 1px dashed var(--dim); outline-offset: -1px; opacity: .8; }
 .build.sm .bi { width: 18px; height: 18px; border-radius: 5px; }
 .bi img { width: 86%; height: 86%; object-fit: contain; }
 .bi[data-tip]:hover::after, .bi[data-tip]:focus::after {

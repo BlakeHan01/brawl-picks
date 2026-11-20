@@ -199,9 +199,9 @@ test('builds: first choice when one is owned, gear pair when two are owned', () 
   assert.deepEqual(c.gear[1], { '30+31': 26 });
   assert.equal(names[10], 'Sp 10');
   const s = summarizeBuilds([c, c]);
-  assert.deepEqual(s[1].sp, [10, 75, 40]);
-  assert.deepEqual(s[1].gad, [20, 62.5, 32]);
-  assert.deepEqual(s[1].gear, [[30, 31], 100, 52]);
+  assert.deepEqual(s[1].sp, [10, 75, 40, 1, 25]); // 75% of 40: clearly ahead
+  assert.deepEqual(s[1].gad, [20, 62.5, 32, 0, 37.5]); // 62.5% of 32: within noise, a close call
+  assert.deepEqual(s[1].gear, [[30, 31], 100, 52, 1, 0]);
   assert.equal(summarizeBuilds([c])[1].gad, undefined); // 16 choices: under the minimum
 });
 

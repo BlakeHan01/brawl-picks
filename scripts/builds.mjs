@@ -35,7 +35,16 @@ export function tallyBuilds(profiles, counts = blankBuilds(), names = {}) {
   return counts;
 }
 
-// list of counts (one per day) -> { brawlerId: { sp: [id, share%, n], gad: [...], gear: [[id, id], share%, n] } }
+// Wilson 95% lower bound of a share.
+function lower(k, n) {
+  const z = 1.96, p = k / n;
+  return (p + (z * z) / (2 * n) - z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / (1 + (z * z) / n);
+}
+
+// list of counts (one per day) ->
+//   { brawlerId: { sp: [id, share%, n, clear, runnerUpShare%], gad: [...], gear: [[id, id], share%, n, clear, runnerUp%] } }
+// clear = 1 when the top choice beats the runner-up head to head: among players who chose either,
+// the low end of the top choice's 95% range is still above half.
 export function summarizeBuilds(list) {
   const sum = { sp: {}, gad: {}, gear: {} };
   for (const c of list) for (const k of ['sp', 'gad', 'gear']) {
@@ -49,9 +58,12 @@ export function summarizeBuilds(list) {
     for (const [b, choices] of Object.entries(sum[k])) {
       const total = Object.values(choices).reduce((s, n) => s + n, 0);
       if (total < MIN_SAMPLES[k]) continue;
-      const [top, n] = Object.entries(choices).sort((x, y) => y[1] - x[1])[0];
-      const share = Math.round((1000 * n) / total) / 10;
-      (out[b] ||= {})[k] = [k === 'gear' ? top.split('+').map(Number) : Number(top), share, total];
+      const sorted = Object.entries(choices).sort((x, y) => y[1] - x[1]);
+      const [top, n] = sorted[0];
+      const second = sorted[1]?.[1] || 0;
+      const pct = (x) => Math.round((1000 * x) / total) / 10;
+      const clear = lower(n, n + second) > 0.5 ? 1 : 0;
+      (out[b] ||= {})[k] = [k === 'gear' ? top.split('+').map(Number) : Number(top), pct(n), total, clear, pct(second)];
     }
   }
   return out;
