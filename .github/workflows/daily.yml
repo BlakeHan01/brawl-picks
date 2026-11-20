@@ -1,9 +1,26 @@
-name: Daily data + deploy
+name: Data + deploy
 
+# Every 30 min: refresh the event rotation (map timers).
+# Every 3 hours (at :17): also pull the per-map brawler stats.
+# Pages is redeployed only when something changed (or on push / manual run).
 on:
   schedule:
-    - cron: "17 9 * * *" # every day 09:17 UTC (~1am Pacific)
+    - cron: "17 */3 * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:
+    inputs:
+      stats:
+        description: "Also pull brawler stats"
+        type: boolean
+        default: true
+      backfill_days:
+        description: "One-off backfill: rebuild this many days (0 = normal run)"
+        type: number
+        default: 0
+      crawl_limit:
+        description: "Players to crawl beyond the top players (blank = default 3000)"
+        type: string
+        default: ""
   push:
     branches: [main]
 
@@ -13,41 +30,67 @@ permissions:
   id-token: write
 
 concurrency:
-  group: daily
+  group: data
   cancel-in-progress: false
 
 jobs:
   data:
     runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.commit.outputs.deploy }}
+    env:
+      BS_API_KEY: ${{ secrets.BS_API_KEY }}
+      WANT_STATS: ${{ github.event.schedule == '17 */3 * * *' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.stats) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Pull map + brawler stats
-        id: fetch
-        continue-on-error: true # keep serving yesterday's data if the pull fails
+
+      - name: Event rotation
+        id: rotation
+        continue-on-error: true
+        run: node scripts/fetch-rotation.mjs
+
+      - name: Brawler stats
+        id: stats
+        if: env.WANT_STATS == 'true'
+        continue-on-error: true # keep serving the last good data if the pull fails
         env:
-          BS_API_KEY: ${{ secrets.BS_API_KEY }}
+          BACKFILL_DAYS: ${{ inputs.backfill_days || 0 }}
+          CRAWL_LIMIT: ${{ inputs.crawl_limit || 3000 }}
         run: node scripts/fetch-data.mjs
-      - name: Commit data if changed
-        if: steps.fetch.outcome == 'success'
+
+      - name: Commit changes
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add site/data/data.json
-          git diff --cached --quiet || (git commit -m "data: daily update $(date -u +%F)" && git push)
+          git add -A .
+          if git diff --cached --quiet; then
+            echo "deploy=${{ github.event_name != 'schedule' }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "data: update $(date -u +'%F %H:%M') UTC"
+          for i in 1 2 3; do git pull --rebase -q && git push && break; sleep 5; done
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
       - uses: actions/configure-pages@v5
+        if: steps.commit.outputs.deploy == 'true'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.commit.outputs.deploy == 'true'
         with:
           path: site
-      - name: Fail the run if the pull failed (site still deployed with old data)
-        if: steps.fetch.outcome != 'success'
-        run: exit 1
+
+      - name: Fail the run if a pull failed (site keeps the previous data)
+        if: steps.rotation.outcome == 'failure' || steps.stats.outcome == 'failure'
+        run: |
+          echo "rotation: ${{ steps.rotation.outcome }}, stats: ${{ steps.stats.outcome }}"
+          exit 1
 
   deploy:
     needs: data
-    if: always() && needs.data.result != 'cancelled'
+    if: always() && needs.data.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

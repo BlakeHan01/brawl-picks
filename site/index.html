@@ -4,36 +4,46 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Brawl Picks</title>
-  <meta name="description" content="Best Brawl Stars brawlers for every map. Search by map initials." />
-  <meta name="theme-color" content="#14111f" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ffc928'/%3E%3Ctext x='16' y='23' font-size='18' font-weight='900' text-anchor='middle' font-family='sans-serif' fill='%2314111f'%3EB%3C/text%3E%3C/svg%3E" />
+  <meta name="description" content="Best Brawl Stars brawlers for every map, from Ranked and high-trophy games of top players. Search by map initials." />
+  <meta name="theme-color" content="#13101d" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ffc928'/%3E%3Ctext x='16' y='23' font-size='18' font-weight='900' text-anchor='middle' font-family='sans-serif' fill='%2313101d'%3EB%3C/text%3E%3C/svg%3E" />
   <link rel="preload" href="data/data.json" as="fetch" crossorigin />
+  <link rel="preload" href="data/rotation.json" as="fetch" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="top">
-    <a class="logo" href="#/" aria-label="Home">Brawl<span>Picks</span></a>
-    <label class="toggle">
-      <input type="checkbox" id="rankedOnly" />
-      <span>Ranked maps only</span>
-    </label>
-  </header>
+  <div class="wrap">
+    <header class="top">
+      <a class="logo" href="#" aria-label="Home">Brawl<span>Picks</span></a>
+    </header>
 
-  <main>
-    <section id="searchView">
-      <div class="searchbox">
-        <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
-               placeholder="Map initials, e.g. hrm → Hard Rock Mine" aria-label="Search maps" />
-        <kbd>/</kbd>
-      </div>
-      <ul id="results" class="results" role="listbox" aria-label="Maps"></ul>
-      <p id="hint" class="hint"></p>
-    </section>
+    <main>
+      <section id="searchView">
+        <div class="searchbox">
+          <div class="sb">
+            <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
+                   placeholder="Map initials, e.g. hrm → Hard Rock Mine" aria-label="Search maps" />
+            <kbd>/</kbd>
+          </div>
+          <div class="chips" id="chips"></div>
+        </div>
+        <div id="liveWrap">
+          <h2>Live now <small id="liveNote"></small></h2>
+          <div class="rot" id="live"></div>
+        </div>
+        <h2 id="listHead"></h2>
+        <ul id="results" class="results" role="listbox" aria-label="Maps"></ul>
+        <p id="hint" class="hint"></p>
+      </section>
 
-    <section id="mapView" hidden></section>
-  </main>
+      <section id="mapView" hidden></section>
+    </main>
 
-  <footer class="foot" id="foot"></footer>
+    <footer class="foot" id="foot"></footer>
+  </div>
   <script type="module" src="app.js"></script>
 </body>
 </html>
