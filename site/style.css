@@ -135,16 +135,15 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .bn { font-weight: 800; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cls { font: 800 10px var(--f-body); text-transform: uppercase; letter-spacing: .05em; border-radius: 4px; padding: 1px 6px; white-space: nowrap; vertical-align: middle; color: var(--cc); background: color-mix(in srgb, var(--cc) 18%, transparent); }
 .rn b .cls, .rn b .build { display: inline-flex; gap: 3px; align-items: center; margin: 3px 0 1px; }
-.build.sm { margin: 0 0 0 4px; vertical-align: middle; }
+.build.sm { display: flex; margin: 3px 0 1px; }
 .bi { position: relative; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--panel2); cursor: help; outline-offset: 1px; }
 .bi.close { outline: 1px dashed var(--dim); outline-offset: -1px; opacity: .8; }
 .build.sm .bi { width: 18px; height: 18px; border-radius: 5px; }
 .bi img { width: 86%; height: 86%; object-fit: contain; }
-.bi[data-tip]:hover::after, .bi[data-tip]:focus::after {
-  content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 20;
-  width: max-content; max-width: 220px; white-space: normal; text-align: left;
-  background: var(--text); color: var(--bg); font: 600 11.5px/1.35 var(--f-body); text-transform: none; letter-spacing: 0;
-  padding: 6px 8px; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.4); pointer-events: none;
+.tip {
+  position: fixed; z-index: 50; max-width: min(260px, calc(100vw - 16px)); pointer-events: none;
+  background: var(--text); color: var(--bg); font: 600 12px/1.35 var(--f-body);
+  padding: 6px 9px; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.4);
 }
 .nr { font: 800 9.5px var(--f-body); margin-left: 4px; }
 .rn b .cls { color: var(--cc); }

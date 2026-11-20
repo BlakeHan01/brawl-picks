@@ -269,7 +269,7 @@ function renderMap(m) {
       <li>
         <span class="rk">${i + 6}</span>
         ${av(r[0], 'sq')}
-        <span class="rn"><b>${esc(B[r[0]]?.n)} ${cls(r[0])}${build(r[0], true)}${notRanked(r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${[...sub(r), `${n(r[4])} games`].join(' · ')}</span></span>
+        <span class="rn"><b>${esc(B[r[0]]?.n)} ${cls(r[0])}${notRanked(r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(r[0], true)}<span>${[...sub(r), `${n(r[4])} games`].join(' · ')}</span></span>
         <span class="barwrap"><span class="bar" style="width:${bar(r[o.col]).toFixed(0)}%"></span></span>
         <span class="wr">${big(r)}</span>
       </li>`).join('')}</ul>` : ''}`;
@@ -286,6 +286,37 @@ function legend(m, hasBans) {
   if (order === 'win') return `<b>Win rate</b> uses results only: few games are pulled toward 50% so luck can't put a brawler on top. ${skill}`;
   return `<b>Most picked</b> orders brawlers by how often these players chose them here. Popular brawlers are safe meta picks, but they don't always win the most. ${skill}`;
 }
+
+// ---------- build tooltips (hover, focus, or tap), kept inside the screen ----------
+const tipEl = Object.assign(document.createElement('div'), { className: 'tip', hidden: true });
+tipEl.setAttribute('role', 'tooltip');
+document.body.append(tipEl);
+let tipFor = null;
+let tipAt = 0;
+function showTip(el) {
+  tipFor = el;
+  tipAt = Date.now();
+  tipEl.textContent = el.dataset.tip;
+  tipEl.hidden = false;
+  const r = el.getBoundingClientRect();
+  const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  const x = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+  const y = r.top - h - 6 >= 8 ? r.top - h - 6 : r.bottom + 6;
+  tipEl.style.left = `${x}px`;
+  tipEl.style.top = `${y}px`;
+}
+const hideTip = () => { tipEl.hidden = true; tipFor = null; };
+// Hover only for a real mouse: on touch screens a tap opens it and a tap elsewhere closes it.
+document.addEventListener('pointerover', (e) => { const b = e.pointerType === 'mouse' && e.target.closest?.('.bi'); if (b) showTip(b); });
+document.addEventListener('pointerout', (e) => { if (e.pointerType === 'mouse' && e.target.closest?.('.bi')) hideTip(); });
+document.addEventListener('focusin', (e) => { const b = e.target.closest?.('.bi'); if (b) showTip(b); });
+document.addEventListener('focusout', (e) => { if (e.target.closest?.('.bi')) hideTip(); });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('.bi');
+  if (b && b !== tipFor) showTip(b); else if (!b) hideTip();
+});
+// Hide on real scrolling, not the small scroll the browser does when focusing the icon.
+window.addEventListener('scroll', () => { if (Date.now() - tipAt > 500) hideTip(); }, { passive: true });
 
 // ---------- routing ----------
 // Map pages are #m-<id> (older links #/m/<id> still work).
