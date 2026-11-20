@@ -47,6 +47,8 @@ The page shows this estimate (50% = average pick), pick rate and game count, and
 
 **Requests go through the RoyaleAPI proxy** (`bsproxy.royaleapi.dev`) because GitHub runner IPs change; the key only needs to allow the proxy's IP.
 
+**Where the data lives.** Everything the job generates is on the `data` branch, which always holds one commit: `scripts/data-branch.sh restore` puts it in the working tree before the pulls and `save` replaces the branch afterwards. main only holds code, so its history doesn't grow with every update.
+
 If a pull fails, the previous files stay in place and the run is marked failed. The stats job also refuses to publish fewer than 5 maps.
 
 **Planned:** a weekly cross-check of our top 5s against Brawl Time Ninja's Ranked list and Masters-level tier lists, flagging big disagreements for review.
@@ -60,9 +62,9 @@ If a pull fails, the previous files stay in place and the run is marked failed. 
 ```
 site/              static site (deployed as-is)
   index.html, style.css, app.js, search.js
-  data/            data.json (daily), rotation.json (every 30 min): generated, don't edit
-  img/             brawler + map images (downloaded by the jobs)
-data/daily/        per-day game counts, last 14 days (not deployed)
+  data/            data.json, rotation.json   } generated: stored on the `data` branch,
+  img/             brawler + map images       } git-ignored on main
+data/              per-day game counts (last 14 days), state, brawler classes: also on `data`
 scripts/
   fetch-data.mjs   daily stats pull
   fetch-rotation.mjs
@@ -79,6 +81,7 @@ No dependencies (Node 22+).
 
 ```bash
 npm run demo       # sample data + server at http://localhost:5173 (no key needed)
+npm run pull-data  # copy the live data (data branch) into your checkout
 npm run data       # real stats  (needs BS_API_KEY)
 npm run rotation   # real rotation (needs BS_API_KEY)
 npm run dev        # serve site/ with whatever data it has
