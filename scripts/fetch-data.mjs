@@ -337,8 +337,9 @@ async function main() {
 
   // Brawler classes (Damage Dealer, Tank, ...): the official API has none. Saved file, refreshed
   // from Brawlify's API when it answers (it blocks some datacenter IPs, so this is best effort).
-  const classFile = resolve(ROOT, process.env.CLASS_FILE || 'scripts/brawler-classes.json');
-  const classes = (await readJSON(classFile)) || { classes: {} };
+  // The saved copy (data/, on the data branch) wins; scripts/brawler-classes.json is the seed.
+  const classFile = resolve(ROOT, process.env.CLASS_FILE || 'data/brawler-classes.json');
+  const classes = (await readJSON(classFile)) || (await readJSON(resolve(ROOT, 'scripts/brawler-classes.json'))) || { classes: {} };
   if (BRAWLIFY !== 'off') {
     try {
       const j = await getJSON(`${BRAWLIFY}/brawlers`, {}, 1);
@@ -347,7 +348,10 @@ async function main() {
         const c = b?.class?.name;
         if (b?.id && c && c !== 'Unknown' && classes.classes[b.id] !== c) { classes.classes[b.id] = c; added++; }
       }
-      if (added) await writeFile(classFile, JSON.stringify(classes, null, 1) + '\n');
+      if (added) {
+        await mkdir(dirname(classFile), { recursive: true });
+        await writeFile(classFile, JSON.stringify(classes, null, 1) + '\n');
+      }
       log(`brawler classes: ${added} updated from Brawlify`);
     } catch (e) {
       log('brawler classes: Brawlify unavailable, using saved file');

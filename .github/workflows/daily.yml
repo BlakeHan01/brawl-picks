@@ -47,6 +47,10 @@ jobs:
         with:
           node-version: 22
 
+      # Generated data lives on the `data` branch (one commit, replaced each run), not on main.
+      - name: Restore data
+        run: scripts/data-branch.sh restore
+
       - name: Event rotation
         id: rotation
         continue-on-error: true
@@ -57,23 +61,21 @@ jobs:
         if: env.WANT_STATS == 'true'
         continue-on-error: true # keep serving the last good data if the pull fails
         env:
+          CLASS_FILE: data/brawler-classes.json
           BACKFILL_DAYS: ${{ inputs.backfill_days || 0 }}
           CRAWL_LIMIT: ${{ inputs.crawl_limit || 3000 }}
         run: node scripts/fetch-data.mjs
 
-      - name: Commit changes
+      - name: Save data
         id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A .
-          if git diff --cached --quiet; then
-            echo "deploy=${{ github.event_name != 'schedule' }}" >> "$GITHUB_OUTPUT"
-            exit 0
+          out=$(scripts/data-branch.sh save)
+          echo "$out"
+          if [ "$out" = "changed=true" ] || [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
           fi
-          git commit -m "data: update $(date -u +'%F %H:%M') UTC"
-          for i in 1 2 3; do git pull --rebase -q && git push && break; sleep 5; done
-          echo "deploy=true" >> "$GITHUB_OUTPUT"
 
       # Version the code file links so browsers fetch new code right after a deploy
       # instead of reusing cached copies (GitHub Pages lets them cache for 10 minutes).
