@@ -134,6 +134,9 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 }
 .bn { font-weight: 800; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cls { font: 800 10px var(--f-body); text-transform: uppercase; letter-spacing: .05em; border-radius: 4px; padding: 1px 6px; white-space: nowrap; vertical-align: middle; color: var(--cc); background: color-mix(in srgb, var(--cc) 18%, transparent); }
+.rn b .cls, .rn b .nr { font: 800 9.5px var(--f-body); margin-left: 4px; }
+.rn b .cls { color: var(--cc); }
+.rn b .nr { color: var(--warn); }
 .cls-dmg { --cc: #ff6b6b; }
 .cls-tank { --cc: #ffa24c; }
 .cls-mark { --cc: #5aa9ff; }
