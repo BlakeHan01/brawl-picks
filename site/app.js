@@ -218,7 +218,7 @@ function renderMap(base) {
         <span class="ur">${pct(ur)} picked</span>
         <span class="ur">${n(g)} games</span>
       </li>`).join('')}</ol>
-    <p class="legend"><b>Win %</b> is an estimate against an average pick, where 50% is average. It's adjusted for skill: the top players we sample won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won. Brawlers with few games are pulled toward ${m.isNew ? 'a starting point set by how often good players pick them' : '50%'} so luck can't put them on top. <b>Picked</b> is the share of teams that played it.</p>
+    <p class="legend"><b>Win %</b> is an estimate against an average pick, where 50% is average. It's adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won. Brawlers with few games are pulled toward ${m.isNew ? 'a starting point set by how often good players pick them' : '50%'} so luck can't put them on top. <b>Picked</b> is the share of teams that played it.</p>
     ${rest.length ? `<h2>Also strong <small>ranks 6–${m.picks.length}</small></h2>
     <ul class="rest">${rest.map(([id, wr, ur, , g], i) => `
       <li>
@@ -260,6 +260,7 @@ function route() {
     document.title = 'Brawl Picks';
     renderLive();
     renderResults();
+    if (matchMedia('(pointer: fine)').matches) q.focus();
   }
 }
 

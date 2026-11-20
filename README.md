@@ -5,7 +5,7 @@ Best Brawl Stars brawlers for every map. Type a map's initials (`hrm` → Hard R
 - **Static site** (`site/`): plain HTML/CSS/JS, no build step. Data is two preloaded JSON files plus self-hosted images, so opening a map is instant.
 - **Data job** (`.github/workflows/daily.yml`) on GitHub Actions:
   - every 30 min: event rotation → `site/data/rotation.json`
-  - daily at 09:17 UTC: brawler stats → `site/data/data.json`
+  - every 3 hours: brawler stats → `site/data/data.json`
   - commits what changed and redeploys `site/` to GitHub Pages.
 
 ## Status
@@ -23,7 +23,11 @@ Confirmed on the first real run: Ranked games have `battle.type` `soloRanked`/`t
 
 ## Data sources and why
 
-**Stats: official Brawl Stars API, high-skill games only.** Win rates from low-trophy lobbies (often bots) or casual players are misleading, so the daily job:
+**Stats: official Brawl Stars API, high-skill games only.** In Ranked battle logs each player's `brawler.trophies` holds their Ranked rank (1–22: 16+ Legendary, 19+ Masters, 22 Pro), checked on real data. The job reads the top players in each region, then crawls up to `CRAWL_LIMIT` (3000) Legendary+ players met in their Ranked games, and records every Ranked game as all-Ranked, Legendary+ (every player 16+) and Masters+ (19+).
+
+**Shadow run (new ranking, shown as "New ranking" on map pages):** Masters+ games once a map has 150, else Legendary+ from 40; the shrink prior is not flat 50% but leans on how often those players pick each brawler (2 points per e-fold of pick rate vs. the map median, capped). The current ranking stays available until we switch.
+
+Earlier notes on the current ranking: Win rates from low-trophy lobbies (often bots) or casual players are misleading, so the daily job:
 1. reads the battle logs of the top `BS_PLAYER_LIMIT` (200) players in each region of `BS_REGIONS` (`global,us,kr,br,de,jp,mx,fr`);
 2. keeps **Ranked** games, plus **trophy** games where *every* player's brawler has `MIN_TROPHIES` (750)+ trophies; friendly/challenge games, draws and showdown are dropped;
 3. de-duplicates games seen from several players and only counts games newer than the previous run;
