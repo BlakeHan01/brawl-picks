@@ -182,13 +182,17 @@ export function rankBrawlers(a, { pickPrior = false } = {}) {
       raw: 100 * (0.5 + p.excess / p.g),
     };
   });
+  const row = (p) => [p.id, r1(p.wr), r1(p.ur), r1(p.raw), p.g];
+  const byPicks = [...rows].sort((x, y) => y.g - x.g || y.wr - x.wr);
   rows.sort((x, y) => y.wr - x.wr);
   return {
     sample: a.n,
     topSideWin: r1(100 * pS),
     low: a.n < LOW_SAMPLE,
     // [brawlerId, estimated win %, use %, skill-adjusted win % before shrinking, games]
-    picks: rows.slice(0, TOP_N).map((p) => [p.id, r1(p.wr), r1(p.ur), r1(p.raw), p.g]),
+    picks: rows.slice(0, TOP_N).map(row),
+    // same rows, most-played first: what good players actually choose on this map
+    popular: byPicks.slice(0, TOP_N).map(row),
   };
 }
 
@@ -329,7 +333,7 @@ async function main() {
     process.exit(1);
   }
 
-  const used = new Set(maps.flatMap((m) => [...m.picks, ...m.shadow.picks].map((p) => p[0])));
+  const used = new Set(maps.flatMap((m) => [...m.picks, ...m.popular, ...m.shadow.picks, ...m.shadow.popular].map((p) => p[0])));
   const B = {};
   await pool([...used], 8, async (id) => {
     if (!brawlers[id]) return;
@@ -337,8 +341,10 @@ async function main() {
   });
   await pool(maps, 8, async (m) => { m.img = typeof m.id === 'number' ? await ensureImage('maps', m.id) : null; });
   for (const m of maps) {
-    m.picks = m.picks.filter((p) => B[p[0]]);
-    m.shadow.picks = m.shadow.picks.filter((p) => B[p[0]]);
+    for (const r of [m, m.shadow]) {
+      r.picks = r.picks.filter((p) => B[p[0]]);
+      r.popular = r.popular.filter((p) => B[p[0]]);
+    }
   }
 
   // Brawlers seen in plenty of trophy games but never in Ranked (e.g. just released, not yet

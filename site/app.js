@@ -23,6 +23,8 @@ const store = {
 let rankedOnly = store.get('rankedOnly') === '1';
 // Shadow run: maps carry the current ranking (picks) and the new one (shadow). Viewers can switch.
 let algo = store.get('algo') === 'current' ? 'current' : 'new';
+// Order on map pages: best estimated win rate, or most played by these (good) players.
+let order = store.get('order') === 'picked' ? 'picked' : 'win';
 const view = (m) => (algo === 'new' && m.shadow ? { ...m, ...m.shadow, isNew: true } : m);
 
 // ---------- time ----------
@@ -203,13 +205,19 @@ function renderMap(base) {
     bindSwitch(base);
     return;
   }
-  const top = m.picks.slice(0, 5);
-  const rest = m.picks.slice(5);
-  const hi = m.picks[0][1], lo = m.picks[m.picks.length - 1][1];
+  const list = order === 'picked' && m.popular?.length ? m.popular : m.picks;
+  const top = list.slice(0, 5);
+  const rest = list.slice(5);
+  const vals = list.map((p) => (order === 'picked' ? p[2] : p[1]));
+  const hi = Math.max(...vals), lo = Math.min(...vals);
   const bar = (s) => 12 + (88 * (s - lo)) / Math.max(0.1, hi - lo);
   const B = DATA.brawlers;
   mapView.innerHTML = head + `
     ${m.low ? '<p class="warn">Few games on this map so far. Treat these picks as a rough guide.</p>' : ''}
+    <div class="seg small" role="group" aria-label="Order">
+      <button data-order="win" aria-pressed="${order === 'win'}">Best win rate</button>
+      <button data-order="picked" aria-pressed="${order === 'picked'}">Most picked</button>
+    </div>
     <ol class="top5">${top.map(([id, wr, ur, , g], i) => `
       <li>
         <span class="rank">${i + 1}</span>
@@ -220,20 +228,25 @@ function renderMap(base) {
         <span class="ur">${pct(ur)} picked</span>
         <span class="ur">${n(g)} games</span>
       </li>`).join('')}</ol>
-    <p class="legend"><b>Win %</b> is an estimate against an average pick, where 50% is average. It's adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won. Brawlers with few games are pulled toward ${m.isNew ? 'a starting point set by how often good players pick them' : '50%'} so luck can't put them on top. <b>Picked</b> is the share of teams that played it.</p>
-    ${rest.length ? `<h2>Also strong <small>ranks 6–${m.picks.length}</small></h2>
+    <p class="legend">${order === 'picked' ? '<b>Most picked</b> orders brawlers by how often these players chose them on this map. Good players already pick well, so popular brawlers are the meta even when their win rate sits near 50%. ' : ''}<b>Win %</b> is an estimate against an average pick, where 50% is average. It's adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won. Brawlers with few games are pulled toward ${m.isNew ? 'a starting point set by how often good players pick them' : '50%'} so luck can't put them on top. <b>Picked</b> is the share of teams that played it.</p>
+    ${rest.length ? `<h2>${order === 'picked' ? 'Also popular' : 'Also strong'} <small>ranks 6–${list.length}</small></h2>
     <ul class="rest">${rest.map(([id, wr, ur, , g], i) => `
       <li>
         <span class="rk">${i + 6}</span>
         ${av(id, 'sq')}
-        <span class="rn"><b>${esc(B[id]?.n)}${notRanked(id) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${pct(ur)} picked · ${n(g)} games</span></span>
-        <span class="barwrap"><span class="bar" style="width:${bar(wr).toFixed(0)}%"></span></span>
-        <span class="wr">${pct(wr)}</span>
+        <span class="rn"><b>${esc(B[id]?.n)}${notRanked(id) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${order === 'picked' ? `${pct(wr)} win` : `${pct(ur)} picked`} · ${n(g)} games</span></span>
+        <span class="barwrap"><span class="bar" style="width:${bar(order === 'picked' ? ur : wr).toFixed(0)}%"></span></span>
+        <span class="wr">${pct(order === 'picked' ? ur : wr)}</span>
       </li>`).join('')}</ul>` : ''}`;
   bindSwitch(base);
 }
 
 function bindSwitch(base) {
+  mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => {
+    order = b.dataset.order;
+    store.set('order', order);
+    renderMap(base);
+  }));
   mapView.querySelectorAll('[data-algo]').forEach((b) => b.addEventListener('click', () => {
     algo = b.dataset.algo;
     store.set('algo', algo);

@@ -151,6 +151,7 @@ test('new ranking: Masters+ when available, pick rate nudges the prior', () => {
   assert.equal(flat.picks.find((p) => p[0] === 1)[1], 50);
   assert.ok(pp.picks.find((p) => p[0] === 1)[1] > 50);
   assert.ok(pp.picks.find((p) => p[0] === 2)[1] < 50);
+  assert.deepEqual(pp.popular.map((p) => p[0]), [1, 3, 2]); // most games first
 });
 
 test('parseRotation turns API slots into ISO times', () => {
