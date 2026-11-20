@@ -1,37 +1,34 @@
 #!/usr/bin/env node
-// Temporary: print the shapes of API fields we haven't used yet (no secrets, no player names).
-import { official, listOf } from './lib.mjs';
-const short = (o, n = 600) => JSON.stringify(o).slice(0, n);
-
-const br = listOf(await official('/brawlers'));
-const b0 = br.find((b) => b.starPowers?.length && b.gadgets?.length) || br[0];
-console.log('BRAWLER keys:', Object.keys(b0), '\nBRAWLER sample:', short(b0, 900));
-
-const top = listOf(await official('/rankings/global/players?limit=40'));
-const prof = await official(`/players/${encodeURIComponent(top[0].tag)}`);
-console.log('PROFILE keys:', Object.keys(prof));
-const pb = prof.brawlers?.find((b) => b.gears?.length) || prof.brawlers?.[0];
-console.log('PROFILE brawler keys:', Object.keys(pb || {}), '\nPROFILE brawler sample:', short({ ...pb }, 900));
-
-let ranked = 0, withStats = 0, withBan = 0, banShapes = new Set(), statsSample = null, starSample = null;
-const statKeys = {};
-for (const p of top) {
-  const log = listOf(await official(`/players/${encodeURIComponent(p.tag)}/battlelog`));
-  for (const it of log) {
-    const bt = it.battle || {};
-    if (bt.type !== 'soloRanked' || !Array.isArray(bt.teams)) continue;
-    ranked++;
-    const pl = bt.teams.flat();
-    if (pl.some((x) => x.stats)) withStats++;
-    if (pl.some((x) => x.bannedBrawler)) withBan++;
-    for (const x of pl) {
-      if (x.bannedBrawler) banShapes.add(short(x.bannedBrawler, 200));
-      if (x.stats) { for (const k of Object.keys(x.stats)) statKeys[k] = (statKeys[k] || 0) + 1; statsSample ||= x.stats; }
-    }
-    starSample ||= bt.starPlayer;
+// Temporary: can we infer builds? Among Legendary+ players, how often does a played brawler
+// have exactly one star power / one gadget / at most two gears (so the equipped ones are known)?
+import { official, listOf, pool } from './lib.mjs';
+const top = listOf(await official('/rankings/global/players?limit=60'));
+const logs = await pool(top, 8, (p) => official(`/players/${encodeURIComponent(p.tag)}/battlelog`));
+const seen = new Map(); // tag -> Set(brawlerId) played in Legendary+ ranked games
+for (const lg of logs) for (const it of listOf(lg)) {
+  const bt = it.battle || {};
+  if (bt.type !== 'soloRanked' || !Array.isArray(bt.teams)) continue;
+  for (const p of bt.teams.flat()) {
+    if (!(p.brawler?.trophies >= 16)) continue;
+    if (!seen.has(p.tag)) seen.set(p.tag, new Set());
+    seen.get(p.tag).add(p.brawler.id);
   }
 }
-console.log(`RANKED battles ${ranked}, with player.stats ${withStats}, with bannedBrawler ${withBan}`);
-console.log('BAN shapes (first 3):', [...banShapes].slice(0, 3));
-console.log('STATS keys:', statKeys, '\nSTATS sample:', short(statsSample, 900));
-console.log('STARPLAYER sample:', short(starSample, 300));
+const tags = [...seen.keys()].slice(0, 400);
+const profs = await pool(tags, 8, (t) => official(`/players/${encodeURIComponent(t)}`));
+const c = { pairs: 0, sp: {}, gad: {}, gear: {}, hc: {} };
+const inc = (o, k) => (o[k] = (o[k] || 0) + 1);
+for (let i = 0; i < tags.length; i++) {
+  const pr = profs[i]; if (!pr) continue;
+  for (const b of pr.brawlers || []) {
+    if (!seen.get(tags[i]).has(b.id)) continue;
+    c.pairs++;
+    inc(c.sp, b.starPowers?.length ?? 0); inc(c.gad, b.gadgets?.length ?? 0);
+    inc(c.gear, b.gears?.length ?? 0); inc(c.hc, b.hyperCharges?.length ?? 0);
+  }
+}
+console.log(`players with profiles: ${profs.filter(Boolean).length}; (player, brawler they played in Legendary+ Ranked) pairs: ${c.pairs}`);
+console.log('star powers owned ->', c.sp);
+console.log('gadgets owned ->', c.gad);
+console.log('gears owned ->', c.gear);
+console.log('hypercharges owned ->', c.hc);
