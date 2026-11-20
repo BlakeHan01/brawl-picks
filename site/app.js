@@ -23,9 +23,10 @@ const store = {
 let rankedOnly = store.get('rankedOnly') === '1';
 // Order on map pages. Rows: [brawlerId, score %, win %, pick %, games, ban %].
 const ORDERS = {
-  score: { label: 'Score', col: 1, head: 'Also strong' },
-  win: { label: 'Win rate', col: 2, head: 'Also strong' },
-  picked: { label: 'Most picked', col: 3, head: 'Also popular' },
+  score: { label: 'Score', col: 1, head: 'Also strong', big: 'score' },
+  banned: { label: 'Most banned', col: 5, head: 'Also banned a lot', big: 'banned' },
+  win: { label: 'Win rate', col: 2, head: 'Also strong', big: 'win', more: true },
+  picked: { label: 'Most picked', col: 3, head: 'Also popular', big: 'picked', more: true },
 };
 let order = ORDERS[store.get('order')] ? store.get('order') : 'score';
 const rowsOf = (m) => m.rows || [];
@@ -230,26 +231,36 @@ function renderMap(m) {
       : `<p class="empty">Not enough high-skill games on this map yet. Picks appear once top players have played it ${n(15)}+ times.</p>`);
     return;
   }
-  const o = ORDERS[order];
+  const hasBans = rows.some((r) => r[5] > 0);
+  const ord = order === 'banned' && !hasBans ? 'score' : order; // trophy-game maps have no bans
+  const o = ORDERS[ord];
   const list = [...rows].sort((x, y) => y[o.col] - x[o.col] || y[1] - x[1]).slice(0, 20);
   const top = list.slice(0, 5);
   const rest = list.slice(5);
   const vals = list.map((r) => r[o.col]);
   const hi = Math.max(...vals), lo = Math.min(...vals);
   const bar = (v) => 12 + (88 * (v - lo)) / Math.max(0.1, hi - lo);
-  const hasBans = rows.some((r) => r[5] > 0);
   const B = DATA.brawlers;
-  const big = (r) => (order === 'picked' ? `${pct(r[3])}` : pct(r[o.col]));
-  const bigLabel = order === 'score' ? 'score' : order === 'win' ? 'win' : 'picked';
+  const big = (r) => pct(r[o.col]);
   const sub = (r) => [
-    order !== 'win' ? `${pct(r[2])} win` : null,
-    order !== 'picked' ? `${pct(r[3])} picked` : null,
-    hasBans ? `${pct(r[5])} banned` : null,
+    ord !== 'win' ? `${pct(r[2])} win` : null,
+    ord !== 'picked' ? `${pct(r[3])} picked` : null,
+    hasBans && ord !== 'banned' ? `${pct(r[5])} banned` : null,
   ].filter(Boolean);
+  const main = Object.entries(ORDERS).filter(([k, v]) => !v.more && (k !== 'banned' || hasBans));
+  const more = Object.entries(ORDERS).filter(([, v]) => v.more);
   mapView.innerHTML = head + `
     ${m.low ? '<p class="warn">Few games on this map so far. Treat these picks as a rough guide.</p>' : ''}
-    <div class="seg small" role="group" aria-label="Order">
-      ${Object.entries(ORDERS).map(([k, v]) => `<button data-order="${k}" aria-pressed="${order === k}">${v.label}</button>`).join('')}
+    <div class="orderbar">
+      <div class="seg small" role="group" aria-label="Sort by">
+        ${main.map(([k, v]) => `<button data-order="${k}" aria-pressed="${ord === k}">${v.label}</button>`).join('')}
+      </div>
+      <label class="more ${o.more ? 'on' : ''}"><span class="sr">More ways to sort</span>
+        <select id="moreOrder" aria-label="More ways to sort">
+          <option value="" ${o.more ? '' : 'selected'}>More…</option>
+          ${more.map(([k, v]) => `<option value="${k}" ${ord === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+        </select>
+      </label>
     </div>
     <ol class="top5">${top.map((r, i) => `
       <li>
@@ -259,7 +270,7 @@ function renderMap(m) {
         ${cls(r[0])}
         ${build(r[0])}
         ${notRanked(r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
-        <span class="wrbig ${order !== 'picked' && r[o.col] >= 55 ? 'hi' : ''}">${big(r)}<small> ${bigLabel}</small></span>
+        <span class="wrbig ${(ord === 'score' || ord === 'win') && r[o.col] >= 55 ? 'hi' : ''}">${big(r)}<small> ${o.big}</small></span>
         ${sub(r).map((t) => `<span class="ur">${t}</span>`).join('')}
         <span class="ur">${n(r[4])} games</span>
       </li>`).join('')}</ol>
@@ -273,17 +284,17 @@ function renderMap(m) {
         <span class="barwrap"><span class="bar" style="width:${bar(r[o.col]).toFixed(0)}%"></span></span>
         <span class="wr">${big(r)}</span>
       </li>`).join('')}</ul>` : ''}`;
-  mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => {
-    order = b.dataset.order;
-    store.set('order', order);
-    renderMap(m);
-  }));
+  const setOrder = (k) => { order = k; store.set('order', order); renderMap(m); };
+  mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => setOrder(b.dataset.order)));
+  $('#moreOrder').addEventListener('change', (e) => { if (e.target.value) setOrder(e.target.value); });
 }
 
 function legend(m, hasBans) {
+  const ordNow = order === 'banned' && !hasBans ? 'score' : order;
   const skill = `Results are adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won (50% = average).`;
-  if (order === 'score') return `<b>Score</b> is our best guess at each brawler's win rate here. It starts from how often good players pick${hasBans ? ' or ban' : ''} it on this map and moves toward its actual results as games add up, with weights fitted from the data. ${skill}`;
-  if (order === 'win') return `<b>Win rate</b> uses results only: few games are pulled toward 50% so luck can't put a brawler on top. ${skill}`;
+  if (ordNow === 'banned') return `<b>Most banned</b> orders brawlers by how often good players ban them on this map: the ones they least want to face, and the ones you're least likely to get. ${skill}`;
+  if (ordNow === 'score') return `<b>Score</b> is our best guess at each brawler's win rate here. It starts from how often good players pick${hasBans ? ' or ban' : ''} it on this map and moves toward its actual results as games add up, with weights fitted from the data. ${skill}`;
+  if (ordNow === 'win') return `<b>Win rate</b> uses results only: few games are pulled toward 50% so luck can't put a brawler on top. ${skill}`;
   return `<b>Most picked</b> orders brawlers by how often these players chose them here. Popular brawlers are safe meta picks, but they don't always win the most. ${skill}`;
 }
 
@@ -370,13 +381,38 @@ $('#chips').addEventListener('click', (e) => {
   sel = 0;
   renderResults();
 });
+// Jump to search from anywhere: "/" or Ctrl+K / Cmd+K, or the floating search button.
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const shortcut = isMac ? '⌘K' : 'Ctrl+K';
+function goSearch() {
+  hideTip();
+  if (!mapView.hidden) { location.hash = ''; route(); } // show the search screen now, not after hashchange
+  window.scrollTo(0, 0);
+  q.focus(); // inside the tap/keypress, so phones open the keyboard
+  q.select();
+}
 document.addEventListener('keydown', (e) => {
-  if (e.key === '/' && document.activeElement !== q) {
-    e.preventDefault();
-    if (!mapView.hidden) location.hash = '';
-    q.focus();
-  } else if (e.key === 'Escape' && !mapView.hidden) location.hash = '';
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); goSearch(); }
+  else if (e.key === '/' && !typing) { e.preventDefault(); goSearch(); }
+  else if (e.key === 'Escape' && !mapView.hidden) location.hash = '';
 });
+const fab = $('#searchFab');
+fab.title = `Search maps (/ or ${shortcut})`;
+fab.addEventListener('click', goSearch);
+$('#kbdHint').textContent = isMac ? '⌘K' : '/';
+
+// One-time tip about the shortcut (computers only).
+function maybeShowTip() {
+  if (!matchMedia('(hover: hover) and (pointer: fine)').matches || store.get('searchTipSeen') === '1') return;
+  const d = $('#searchTip');
+  $('#tipKeys').innerHTML = `<kbd>/</kbd> or <kbd>${shortcut}</kbd>`;
+  d.hidden = false;
+  const ok = $('#tipOk');
+  ok.focus();
+  ok.addEventListener('click', () => { d.hidden = true; store.set('searchTipSeen', '1'); q.focus(); }, { once: true });
+}
+setTimeout(maybeShowTip, 1200);
 window.addEventListener('hashchange', route);
 
 load();
