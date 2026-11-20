@@ -1,0 +1,16 @@
+# Temporary diagnostic: runs on pushes to claude/* branches only; removed before merge.
+name: Diag
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['scripts/diag.mjs', '.github/workflows/diag.yml']
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node scripts/diag.mjs
+        env:
+          BS_API_KEY: ${{ secrets.BS_API_KEY }}
