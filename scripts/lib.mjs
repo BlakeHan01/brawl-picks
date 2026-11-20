@@ -113,13 +113,15 @@ export const modeColor = (id) => MODE_INFO[id]?.[1] || '#9a8fc0';
 // ---------- images (self-hosted copies of Brawlify CDN art) ----------
 const exists = (p) => access(p).then(() => true, () => false);
 
-// kind: 'brawlers' | 'maps'. Returns the site-relative path, or null if unavailable.
+// kind: 'brawlers' | 'maps' | 'star-powers' | 'gadgets' | 'gears'. Returns the site-relative path, or null if unavailable.
 export async function ensureImage(kind, id) {
   const rel = `img/${kind}/${id}.png`;
   const file = resolve(ROOT, 'site', rel);
   if (await exists(file)) return rel;
   if (process.env.IMAGES === 'off') return null;
-  const src = kind === 'brawlers' ? `${CDN}/brawlers/borderless/${id}.png` : `${CDN}/maps/regular/${id}.png`;
+  const path = { brawlers: 'brawlers/borderless', maps: 'maps/regular', 'star-powers': 'star-powers/borderless', gadgets: 'gadgets/borderless', gears: 'gears/regular' }[kind];
+  if (!path) return null;
+  const src = `${CDN}/${path}/${id}.png`;
   try {
     const r = await fetch(src, { headers: { 'user-agent': 'brawl-picks/1.0' } });
     if (!r.ok || !String(r.headers.get('content-type')).startsWith('image/')) return null;
