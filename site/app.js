@@ -172,6 +172,29 @@ const cls = (id) => {
   const c = DATA.brawlers[id]?.c;
   return c ? `<span class="cls cls-${CLASS_KEY[c] || 'other'}">${esc(c)}</span>` : '';
 };
+// Best build: icons with a tooltip (hover, or tap on a phone). From what Legendary+ players chose:
+// the star power / gadget they bought first when they owned only one, and the two gears they own.
+function build(id, small = false) {
+  const b = DATA.brawlers[id]?.b;
+  if (!b) return '';
+  const I = DATA.items || {};
+  const icon = (itemId, tip) => {
+    const it = I[itemId];
+    if (!it?.img) return '';
+    const t = `${tip}: ${it.n}`;
+    return `<span class="bi" tabindex="0" role="img" aria-label="${esc(t)}" data-tip="${esc(t)}"><img src="${esc(it.img)}" alt="" loading="lazy"></span>`;
+  };
+  const why = (x, what) => ` · ${Math.round(x[1])}% of ${x[2]} Legendary+ players ${what}`;
+  const parts = [];
+  if (b.sp) parts.push(icon(b.sp[0], 'Star power').replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.sp, 'chose it first'))}"`));
+  if (b.gad) parts.push(icon(b.gad[0], 'Gadget').replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.gad, 'chose it first'))}"`));
+  if (b.gear) {
+    const names = b.gear[0].map((g) => I[g]?.n).filter(Boolean).join(' + ');
+    for (const g of b.gear[0]) parts.push(icon(g, 'Gear').replace(/data-tip="([^"]*)"/, () => `data-tip="${esc(`Gears: ${names}${why(b.gear, 'run this pair')}`)}"`));
+  }
+  const html = parts.filter(Boolean).join('');
+  return html ? `<span class="build${small ? ' sm' : ''}">${html}</span>` : '';
+}
 const notRanked = (id) => (DATA.notInRanked || []).includes(Number(id));
 const pct = (x) => `${x.toFixed(1)}%`;
 const n = (x) => Number(x).toLocaleString();
@@ -232,6 +255,7 @@ function renderMap(m) {
         ${av(r[0], 'sq')}
         <span class="bn">${esc(B[r[0]]?.n)}</span>
         ${cls(r[0])}
+        ${build(r[0])}
         ${notRanked(r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
         <span class="wrbig ${order !== 'picked' && r[o.col] >= 55 ? 'hi' : ''}">${big(r)}<small> ${bigLabel}</small></span>
         ${sub(r).map((t) => `<span class="ur">${t}</span>`).join('')}
@@ -243,7 +267,7 @@ function renderMap(m) {
       <li>
         <span class="rk">${i + 6}</span>
         ${av(r[0], 'sq')}
-        <span class="rn"><b>${esc(B[r[0]]?.n)} ${cls(r[0])}${notRanked(r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${[...sub(r), `${n(r[4])} games`].join(' · ')}</span></span>
+        <span class="rn"><b>${esc(B[r[0]]?.n)} ${cls(r[0])}${build(r[0], true)}${notRanked(r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${[...sub(r), `${n(r[4])} games`].join(' · ')}</span></span>
         <span class="barwrap"><span class="bar" style="width:${bar(r[o.col]).toFixed(0)}%"></span></span>
         <span class="wr">${big(r)}</span>
       </li>`).join('')}</ul>` : ''}`;

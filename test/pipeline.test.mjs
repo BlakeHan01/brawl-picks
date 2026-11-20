@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { tally, buildMaps, crawlTags, fitModel, scoreRows } from '../scripts/fetch-data.mjs';
 import { parseRotation } from '../scripts/fetch-rotation.mjs';
 import { parseTime, modeName } from '../scripts/lib.mjs';
+import { tallyBuilds, summarizeBuilds, blankBuilds } from '../scripts/builds.mjs';
 
 const T0 = Date.UTC(2026, 10, 20, 12, 0, 0);
 const stamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, '.000Z');
@@ -182,6 +183,28 @@ test('Masters+ once a map has 150 Masters+ games', () => {
   assert.equal(m.mastersGames, 200);
 });
 
+test('builds: first choice when one is owned, gear pair when two are owned', () => {
+  const prof = (sp, gad, gears, power = 11) => ({ brawlers: [{ id: 1, power, starPowers: sp.map((id) => ({ id, name: `SP ${id}` })), gadgets: gad.map((id) => ({ id, name: `G ${id}` })), gears: gears.map((id) => ({ id, name: `GEAR ${id}` })) }] });
+  const profiles = [
+    ...Array.from({ length: 15 }, () => prof([10], [20, 21], [30, 31])),
+    ...Array.from({ length: 5 }, () => prof([11], [21], [31, 32, 33])),
+    ...Array.from({ length: 10 }, () => prof([10, 11], [20], [31, 30])),
+    prof([11], [21], [30, 31], 8), // power 8: can't own a star power yet, ignored for star powers
+  ];
+  const names = {};
+  const c = tallyBuilds(profiles, blankBuilds(), names);
+  assert.equal(c.players, 31);
+  assert.deepEqual(c.sp[1], { 10: 15, 11: 5 });
+  assert.deepEqual(c.gad[1], { 21: 6, 20: 10 });
+  assert.deepEqual(c.gear[1], { '30+31': 26 });
+  assert.equal(names[10], 'Sp 10');
+  const s = summarizeBuilds([c, c]);
+  assert.deepEqual(s[1].sp, [10, 75, 40]);
+  assert.deepEqual(s[1].gad, [20, 62.5, 32]);
+  assert.deepEqual(s[1].gear, [[30, 31], 100, 52]);
+  assert.equal(summarizeBuilds([c])[1].gad, undefined); // 16 choices: under the minimum
+});
+
 test('parseRotation turns API slots into ISO times', () => {
   const r = parseRotation([
     { startTime: '20261120T080000.000Z', endTime: '20261121T080000.000Z', slotId: 2, event: { id: 15000853, mode: 'brawlHockey', map: 'Below Zero', modifiers: [] } },
@@ -206,6 +229,11 @@ function mockApi({ spacingMin = 1 } = {}) {
     let m;
     if (p === '/v1/brawlers') return send({ items: Array.from({ length: 6 }, (_, k) => ({ id: 16000000 + k, name: k === 0 ? 'EL PRIMO' : k === 1 ? 'R-T' : `BRAWLER ${k}` })) });
     if (p === '/v1/rankings/global/players') return send({ items: Array.from({ length: 6 }, (_, k) => ({ tag: `#P${k + 1}` })) });
+    if ((m = p.match(/^\/v1\/players\/([^/]+)$/))) {
+      return send({ tag: decodeURIComponent(m[1]), brawlers: [
+        { id: 16000000, power: 11, starPowers: [{ id: 23000076, name: 'SHELL SHOCK' }], gadgets: [{ id: 23000255, name: 'FAST FORWARD' }, { id: 23000288, name: 'CLAY PIGEONS' }], gears: [{ id: 62000002, name: 'DAMAGE' }, { id: 62000004, name: 'SHIELD' }] },
+      ] });
+    }
     if ((m = p.match(/^\/v1\/players\/(.+)\/battlelog$/))) {
       const tag = decodeURIComponent(m[1]);
       const now = Date.now();
@@ -257,6 +285,15 @@ test('end to end: stats + rotation from the mock API', async () => {
   const bz = d.maps.find((m) => m.name === 'Below Zero');
   assert.equal(bz.basis, 'trophy');
   assert.deepEqual(d.notInRanked, []); // every brawler in the mock also plays Ranked
+  // builds from the mock profiles: one star power owned, two gears owned, both gadgets owned
+  const b = d.brawlers[16000000].b;
+  assert.equal(b.sp[0], 23000076);
+  assert.equal(b.sp[1], 100);
+  assert.ok(b.sp[2] >= 20);
+  assert.deepEqual(b.gear[0], [62000002, 62000004]);
+  assert.equal(b.gad, undefined); // owning both gadgets says nothing
+  assert.equal(d.items[23000076].n, 'Shell Shock');
+  assert.equal(d.items[62000004].n, 'Shield');
   assert.equal(bz.low, true);
   const state = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8'));
   assert.ok(Date.parse(state.lastRun) > 0);

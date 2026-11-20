@@ -24,6 +24,7 @@
 //   BS_REGIONS       ranking regions (default global,us,kr,br,de,jp,mx,fr)
 //   CRAWL_LIMIT      extra Legendary+ players to read per run (default 3000, 0 = off)
 //   BACKFILL_DAYS    one-off: rebuild the last n day files from every game in the logs read
+//   PROFILE_LIMIT    Legendary+ player profiles to read per run for builds (default 1500, 0 = off)
 //   MIN_TROPHIES     min brawler trophies for every player in a trophy game (default 750)
 //   WINDOW_DAYS      days of daily files to combine (default 14)
 //   BRAWLIFY_BASE    Brawlify API for brawler classes (default https://api.brawlapi.com/v1, "off" to skip)
@@ -36,17 +37,20 @@ import {
   ROOT, BS_KEY, log, official, getJSON, pool, listOf, parseTime, titleCase, nameKey,
   modeName, modeColor, RANKED_MODES, ensureImage,
 } from './lib.mjs';
+import { blankBuilds, tallyBuilds, summarizeBuilds } from './builds.mjs';
 
 const PLAYER_LIMIT = Number(process.env.BS_PLAYER_LIMIT || 200);
 const REGIONS = (process.env.BS_REGIONS || 'global,us,kr,br,de,jp,mx,fr').split(',').map((s) => s.trim()).filter(Boolean);
 const CRAWL_LIMIT = Number(process.env.CRAWL_LIMIT ?? 3000);
 const BRAWLIFY = process.env.BRAWLIFY_BASE || 'https://api.brawlapi.com/v1';
+const PROFILE_LIMIT = Number(process.env.PROFILE_LIMIT ?? 1500);
 const MIN_TROPHIES = Number(process.env.MIN_TROPHIES || 750);
 const WINDOW_DAYS = Number(process.env.WINDOW_DAYS || 14);
 const BACKFILL_DAYS = Math.min(Number(process.env.BACKFILL_DAYS || 0), WINDOW_DAYS);
 const OUT = resolve(ROOT, process.env.OUT || 'site/data/data.json');
 const DAILY_DIR = resolve(ROOT, process.env.DAILY_DIR || 'data/daily');
 const STATE = join(DAILY_DIR, '..', 'state.json');
+const BUILD_DIR = join(DAILY_DIR, '..', 'builds');
 
 export const LEGENDARY = 16;
 export const MASTERS = 19;
@@ -305,7 +309,11 @@ async function main() {
 
   const brawlersJ = await official('/brawlers');
   const brawlers = {};
-  for (const b of listOf(brawlersJ)) if (b?.id && b?.name) brawlers[b.id] = { n: titleCase(b.name) };
+  const itemNames = {};
+  for (const b of listOf(brawlersJ)) {
+    if (b?.id && b?.name) brawlers[b.id] = { n: titleCase(b.name) };
+    for (const it of [...(b.starPowers || []), ...(b.gadgets || [])]) if (it?.id && it.name) itemNames[it.id] = titleCase(it.name);
+  }
   if (!Object.keys(brawlers).length) throw new Error('no brawlers returned');
 
   const rankings = await pool(REGIONS, 4, (r) => official(`/rankings/${r}/players?limit=${PLAYER_LIMIT}`));
@@ -329,6 +337,36 @@ async function main() {
     crawled += extra.length;
     frontier = more;
   }
+
+  // Builds: read Legendary+ players' profiles (each player at most once per window).
+  await mkdir(BUILD_DIR, { recursive: true });
+  const runDate = new Date(started).toISOString().slice(0, 10);
+  const seenFile = join(BUILD_DIR, 'seen.json');
+  const seen = (await readJSON(seenFile)) || {};
+  const oldest = new Date(started - (WINDOW_DAYS - 1) * 864e5).toISOString().slice(0, 10);
+  for (const [t, d] of Object.entries(seen)) if (d < oldest) delete seen[t];
+  if (PROFILE_LIMIT > 0) {
+    const cands = new Set();
+    for (const lg of logs) for (const it of listOf(lg)) {
+      const bt = it.battle || {};
+      if (!RANKED_TYPES.has(bt.type) || !Array.isArray(bt.teams)) continue;
+      for (const p of bt.teams.flat()) if (p?.tag && !seen[p.tag] && Number(p.brawler?.trophies) >= LEGENDARY) cands.add(p.tag);
+    }
+    const pick = [...cands].slice(0, PROFILE_LIMIT);
+    const profiles = await pool(pick, 10, (t) => official(`/players/${encodeURIComponent(t)}`));
+    const bfile = join(BUILD_DIR, `${runDate}.json`);
+    const counts = tallyBuilds(profiles, (await readJSON(bfile)) || blankBuilds(), itemNames);
+    pick.forEach((t, i) => { if (profiles[i]) seen[t] = runDate; });
+    await writeFile(bfile, JSON.stringify(counts));
+    await writeFile(seenFile, JSON.stringify(seen));
+    log(`builds: read ${profiles.filter(Boolean).length}/${pick.length} new Legendary+ profiles (${counts.players} today, ${Object.keys(seen).length} in window)`);
+  }
+  const itemsFile = join(BUILD_DIR, 'items.json');
+  Object.assign(itemNames, { ...((await readJSON(itemsFile)) || {}), ...itemNames });
+  await writeFile(itemsFile, JSON.stringify(itemNames));
+  const bfiles = (await readdir(BUILD_DIR)).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
+  for (const f of bfiles.slice(0, -WINDOW_DAYS)) await unlink(join(BUILD_DIR, f));
+  const builds = summarizeBuilds((await Promise.all(bfiles.slice(-WINDOW_DAYS).map((f) => readJSON(join(BUILD_DIR, f))))).filter(Boolean));
 
   // Each game goes into the file for the day it was played (UTC).
   // Normal run: only games newer than the last run, merged into existing day files.
@@ -401,7 +439,17 @@ async function main() {
   await pool([...used], 8, async (id) => {
     if (!brawlers[id]) return;
     B[id] = { ...brawlers[id], c: classes.classes[id] || '', img: await ensureImage('brawlers', id) };
+    if (builds[id]) B[id].b = builds[id];
   });
+  // Names and icons for the build items shown.
+  const items = {};
+  const want = [];
+  for (const b of Object.values(B)) {
+    if (b.b?.sp) want.push(['star-powers', b.b.sp[0]]);
+    if (b.b?.gad) want.push(['gadgets', b.b.gad[0]]);
+    for (const g of b.b?.gear?.[0] || []) want.push(['gears', g]);
+  }
+  await pool(want, 8, async ([kind, id]) => { items[id] = { n: itemNames[id] || '', img: await ensureImage(kind, id) }; });
   await pool(maps, 8, async (m) => { m.img = typeof m.id === 'number' ? await ensureImage('maps', m.id) : null; });
   for (const m of maps) {
     m.rows = m.rows.filter((p) => B[p[0]]);
@@ -424,6 +472,7 @@ async function main() {
     battles: totals,
     model,
     notInRanked,
+    items,
     brawlers: B,
     maps,
   };

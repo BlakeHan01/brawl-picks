@@ -21,6 +21,10 @@ on:
         description: "Players to crawl beyond the top players (blank = default 3000)"
         type: string
         default: ""
+      profile_limit:
+        description: "Legendary+ profiles to read for builds (blank = default 1500)"
+        type: string
+        default: ""
   push:
     branches: [main]
 
@@ -64,6 +68,7 @@ jobs:
           CLASS_FILE: data/brawler-classes.json
           BACKFILL_DAYS: ${{ inputs.backfill_days || 0 }}
           CRAWL_LIMIT: ${{ inputs.crawl_limit || 3000 }}
+          PROFILE_LIMIT: ${{ inputs.profile_limit || 1500 }}
         run: node scripts/fetch-data.mjs
 
       - name: Save data
