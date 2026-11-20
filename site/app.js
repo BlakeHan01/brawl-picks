@@ -161,6 +161,7 @@ function moveSel(d) {
 }
 
 // ---------- map view ----------
+const notRanked = (id) => (DATA.notInRanked || []).includes(Number(id));
 const pct = (x) => `${x.toFixed(1)}%`;
 const n = (x) => Number(x).toLocaleString();
 
@@ -214,6 +215,7 @@ function renderMap(base) {
         <span class="rank">${i + 1}</span>
         ${av(id, 'sq')}
         <span class="bn">${esc(B[id]?.n)}</span>
+        ${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}
         <span class="wrbig ${wr >= 55 ? 'hi' : ''}">${pct(wr)}</span>
         <span class="ur">${pct(ur)} picked</span>
         <span class="ur">${n(g)} games</span>
@@ -224,7 +226,7 @@ function renderMap(base) {
       <li>
         <span class="rk">${i + 6}</span>
         ${av(id, 'sq')}
-        <span class="rn"><b>${esc(B[id]?.n)}</b><span>${pct(ur)} picked · ${n(g)} games</span></span>
+        <span class="rn"><b>${esc(B[id]?.n)}${notRanked(id) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${pct(ur)} picked · ${n(g)} games</span></span>
         <span class="barwrap"><span class="bar" style="width:${bar(wr).toFixed(0)}%"></span></span>
         <span class="wr">${pct(wr)}</span>
       </li>`).join('')}</ul>` : ''}`;

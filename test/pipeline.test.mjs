@@ -220,6 +220,7 @@ test('end to end: stats + rotation from the mock API', async () => {
   assert.equal(d.brawlers[16000001].n, 'R-T');
   const bz = d.maps.find((m) => m.name === 'Below Zero');
   assert.equal(bz.basis, 'trophy');
+  assert.deepEqual(d.notInRanked, []); // every brawler in the mock also plays Ranked
   assert.equal(bz.low, true);
   const state = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8'));
   assert.ok(Date.parse(state.lastRun) > 0);

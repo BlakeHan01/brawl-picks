@@ -131,6 +131,7 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
   display: grid; place-items: center; font-family: var(--f-display); font-size: 15px; color: var(--accent-ink); background: var(--accent);
 }
 .bn { font-weight: 800; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nr { font: 800 9.5px var(--f-body); text-transform: uppercase; letter-spacing: .04em; color: var(--warn); background: var(--panel2); border-radius: 4px; padding: 1px 5px; white-space: nowrap; vertical-align: middle; }
 .wrbig { font: 700 18px var(--f-num); margin-top: 2px; }
 .wrbig.hi { color: var(--good); }
 .ur { font: 11px var(--f-num); color: var(--dim); }

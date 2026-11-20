@@ -341,6 +341,14 @@ async function main() {
     m.shadow.picks = m.shadow.picks.filter((p) => B[p[0]]);
   }
 
+  // Brawlers seen in plenty of trophy games but never in Ranked (e.g. just released, not yet
+  // allowed in Ranked). The site labels them so trophy picks aren't mistaken for Ranked advice.
+  const seenIn = { r: {}, t: {} };
+  for (const d of days) for (const m of Object.values(d.maps)) for (const g of ['r', 't']) {
+    for (const [id, v] of Object.entries(m[g]?.b || {})) seenIn[g][id] = (seenIn[g][id] || 0) + v[0] + v[2];
+  }
+  const notInRanked = Object.keys(seenIn.t).filter((id) => seenIn.t[id] >= 30 && !seenIn.r[id]).map(Number);
+
   const totals = { ranked: 0, legendary: 0, masters: 0, trophy: 0 };
   for (const d of days.filter((x) => x.v === DAY_VERSION)) for (const k of Object.keys(totals)) totals[k] += d.battles[k] || 0;
   const data = {
@@ -348,6 +356,7 @@ async function main() {
     window: { days: days.length, from: keep[0]?.slice(0, 10), to: date },
     minTrophies: MIN_TROPHIES,
     battles: totals,
+    notInRanked,
     brawlers: B,
     maps,
   };
