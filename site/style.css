@@ -133,6 +133,15 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
   display: grid; place-items: center; font-family: var(--f-display); font-size: 15px; color: var(--accent-ink); background: var(--accent);
 }
 .bn { font-weight: 800; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cls { font: 800 10px var(--f-body); text-transform: uppercase; letter-spacing: .05em; border-radius: 4px; padding: 1px 6px; white-space: nowrap; vertical-align: middle; color: var(--cc); background: color-mix(in srgb, var(--cc) 18%, transparent); }
+.cls-dmg { --cc: #ff6b6b; }
+.cls-tank { --cc: #ffa24c; }
+.cls-mark { --cc: #5aa9ff; }
+.cls-art { --cc: #5bd47a; }
+.cls-ctrl { --cc: #c48bff; }
+.cls-sup { --cc: #3fd6c6; }
+.cls-asn { --cc: #ff7ac8; }
+.cls-other { --cc: var(--dim); }
 .nr { font: 800 9.5px var(--f-body); text-transform: uppercase; letter-spacing: .04em; color: var(--warn); background: var(--panel2); border-radius: 4px; padding: 1px 5px; white-space: nowrap; vertical-align: middle; }
 .wrbig { font: 700 18px var(--f-num); margin-top: 2px; }
 .wrbig.hi { color: var(--good); }

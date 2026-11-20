@@ -25,19 +25,21 @@
 //   BACKFILL_DAYS    one-off: rebuild the last n day files from every game in the logs read
 //   MIN_TROPHIES     min brawler trophies for every player in a trophy game (default 750)
 //   WINDOW_DAYS      days of daily files to combine (default 14)
+//   BRAWLIFY_BASE    Brawlify API for brawler classes (default https://api.brawlapi.com/v1, "off" to skip)
 //   IMAGES           "off" to skip downloading images
 //   OUT, DAILY_DIR   output paths (for tests)
 
 import { readFile, writeFile, mkdir, readdir, unlink } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import {
-  ROOT, BS_KEY, log, official, pool, listOf, parseTime, titleCase, nameKey,
+  ROOT, BS_KEY, log, official, getJSON, pool, listOf, parseTime, titleCase, nameKey,
   modeName, modeColor, RANKED_MODES, ensureImage,
 } from './lib.mjs';
 
 const PLAYER_LIMIT = Number(process.env.BS_PLAYER_LIMIT || 200);
 const REGIONS = (process.env.BS_REGIONS || 'global,us,kr,br,de,jp,mx,fr').split(',').map((s) => s.trim()).filter(Boolean);
 const CRAWL_LIMIT = Number(process.env.CRAWL_LIMIT ?? 3000);
+const BRAWLIFY = process.env.BRAWLIFY_BASE || 'https://api.brawlapi.com/v1';
 const MIN_TROPHIES = Number(process.env.MIN_TROPHIES || 750);
 const WINDOW_DAYS = Number(process.env.WINDOW_DAYS || 14);
 const BACKFILL_DAYS = Math.min(Number(process.env.BACKFILL_DAYS || 0), WINDOW_DAYS);
@@ -333,11 +335,30 @@ async function main() {
     process.exit(1);
   }
 
+  // Brawler classes (Damage Dealer, Tank, ...): the official API has none. Saved file, refreshed
+  // from Brawlify's API when it answers (it blocks some datacenter IPs, so this is best effort).
+  const classFile = resolve(ROOT, process.env.CLASS_FILE || 'scripts/brawler-classes.json');
+  const classes = (await readJSON(classFile)) || { classes: {} };
+  if (BRAWLIFY !== 'off') {
+    try {
+      const j = await getJSON(`${BRAWLIFY}/brawlers`, {}, 1);
+      let added = 0;
+      for (const b of listOf(j)) {
+        const c = b?.class?.name;
+        if (b?.id && c && c !== 'Unknown' && classes.classes[b.id] !== c) { classes.classes[b.id] = c; added++; }
+      }
+      if (added) await writeFile(classFile, JSON.stringify(classes, null, 1) + '\n');
+      log(`brawler classes: ${added} updated from Brawlify`);
+    } catch (e) {
+      log('brawler classes: Brawlify unavailable, using saved file');
+    }
+  }
+
   const used = new Set(maps.flatMap((m) => [...m.picks, ...m.popular, ...m.shadow.picks, ...m.shadow.popular].map((p) => p[0])));
   const B = {};
   await pool([...used], 8, async (id) => {
     if (!brawlers[id]) return;
-    B[id] = { ...brawlers[id], img: await ensureImage('brawlers', id) };
+    B[id] = { ...brawlers[id], c: classes.classes[id] || '', img: await ensureImage('brawlers', id) };
   });
   await pool(maps, 8, async (m) => { m.img = typeof m.id === 'number' ? await ensureImage('maps', m.id) : null; });
   for (const m of maps) {

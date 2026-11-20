@@ -172,8 +172,9 @@ test('parseRotation turns API slots into ISO times', () => {
 function mockApi({ spacingMin = 1 } = {}) {
   return createServer((req, res) => {
     const send = (j, s = 200) => res.writeHead(s, { 'content-type': 'application/json' }).end(JSON.stringify(j));
-    if (req.headers.authorization !== 'Bearer KEY') return send({ reason: 'accessDenied' }, 403);
     const p = new URL(req.url, 'http://x').pathname;
+    if (p === '/bf/brawlers') return send({ list: [{ id: 16000000, class: { name: 'Tank' } }, { id: 16000001, class: { name: 'Unknown' } }] });
+    if (req.headers.authorization !== 'Bearer KEY') return send({ reason: 'accessDenied' }, 403);
     let m;
     if (p === '/v1/brawlers') return send({ items: Array.from({ length: 6 }, (_, k) => ({ id: 16000000 + k, name: k === 0 ? 'EL PRIMO' : k === 1 ? 'R-T' : `BRAWLER ${k}` })) });
     if (p === '/v1/rankings/global/players') return send({ items: Array.from({ length: 6 }, (_, k) => ({ tag: `#P${k + 1}` })) });
@@ -204,7 +205,9 @@ test('end to end: stats + rotation from the mock API', async () => {
   await mkdir(daily);
   // an old file that should drop out of the 14-day window
   for (let k = 0; k < 15; k++) await writeFile(join(daily, `2020-01-${String(k + 1).padStart(2, '0')}.json`), JSON.stringify({ battles: { ranked: 0, trophy: 0 }, maps: {} }));
-  const env = { BS_API_BASE: base, BS_API_KEY: 'KEY', BS_REGIONS: 'global', CRAWL_LIMIT: '0', MIN_TROPHIES: '500', OUT: join(dir, 'data.json'), DAILY_DIR: daily };
+  const classFile = join(dir, 'classes.json');
+  await writeFile(classFile, JSON.stringify({ classes: { 16000002: 'Support' } }));
+  const env = { BS_API_BASE: base, BRAWLIFY_BASE: base.replace(/\/v1$/, '/bf'), CLASS_FILE: classFile, BS_API_KEY: 'KEY', BS_REGIONS: 'global', CRAWL_LIMIT: '0', MIN_TROPHIES: '500', OUT: join(dir, 'data.json'), DAILY_DIR: daily };
   const r = await run('scripts/fetch-data.mjs', env);
   const rot = await run('scripts/fetch-rotation.mjs', { ...env, OUT: join(dir, 'rotation.json') });
   srv.close();
@@ -219,6 +222,10 @@ test('end to end: stats + rotation from the mock API', async () => {
   assert.equal(d.battles.trophy, 6 * 4);
   assert.equal(d.brawlers[16000000].n, 'El Primo');
   assert.equal(d.brawlers[16000001].n, 'R-T');
+  assert.equal(d.brawlers[16000000].c, 'Tank'); // from the Brawlify mock
+  assert.equal(d.brawlers[16000001].c, ''); // "Unknown" is ignored
+  assert.equal(d.brawlers[16000002].c, 'Support'); // from the saved file
+  assert.equal(JSON.parse(await readFile(classFile, 'utf8')).classes[16000000], 'Tank');
   const bz = d.maps.find((m) => m.name === 'Below Zero');
   assert.equal(bz.basis, 'trophy');
   assert.deepEqual(d.notInRanked, []); // every brawler in the mock also plays Ranked
@@ -235,7 +242,7 @@ test('backfill files games by the day they were played', async () => {
   const srv = mockApi({ spacingMin: 2 * 60 }).listen(0); // one game every 2 hours, 25 per player: ~2 days
   const dir = await mkdtemp(join(tmpdir(), 'bp-'));
   const daily = join(dir, 'daily');
-  const env = { BS_API_BASE: `http://127.0.0.1:${srv.address().port}/v1`, BS_API_KEY: 'KEY', BS_REGIONS: 'global', CRAWL_LIMIT: '0', MIN_TROPHIES: '500', OUT: join(dir, 'data.json'), DAILY_DIR: daily, BACKFILL_DAYS: '3' };
+  const env = { BS_API_BASE: `http://127.0.0.1:${srv.address().port}/v1`, BS_API_KEY: 'KEY', BS_REGIONS: 'global', CRAWL_LIMIT: '0', MIN_TROPHIES: '500', OUT: join(dir, 'data.json'), DAILY_DIR: daily, BACKFILL_DAYS: '3', BRAWLIFY_BASE: 'off' };
   const r = await run('scripts/fetch-data.mjs', env);
   srv.close();
   assert.equal(r.code, 0, r.stderr + r.stdout);
@@ -251,7 +258,7 @@ test('backfill files games by the day they were played', async () => {
 
 test('no API key: exits non-zero and writes nothing', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'bp-'));
-  const r = await run('scripts/fetch-data.mjs', { BS_API_KEY: '', OUT: join(dir, 'data.json'), DAILY_DIR: join(dir, 'daily') });
+  const r = await run('scripts/fetch-data.mjs', { BS_API_KEY: '', BRAWLIFY_BASE: 'off', OUT: join(dir, 'data.json'), DAILY_DIR: join(dir, 'daily') });
   assert.equal(r.code, 1);
   assert.match(r.stderr, /BS_API_KEY is not set/);
   await assert.rejects(readFile(join(dir, 'data.json')));

@@ -163,6 +163,12 @@ function moveSel(d) {
 }
 
 // ---------- map view ----------
+// Class line under each brawler, coloured per class, to find them fast in the draft screen.
+const CLASS_KEY = { 'Damage Dealer': 'dmg', Tank: 'tank', Marksman: 'mark', Artillery: 'art', Controller: 'ctrl', Support: 'sup', Assassin: 'asn' };
+const cls = (id) => {
+  const c = DATA.brawlers[id]?.c;
+  return c ? `<span class="cls cls-${CLASS_KEY[c] || 'other'}">${esc(c)}</span>` : '';
+};
 const notRanked = (id) => (DATA.notInRanked || []).includes(Number(id));
 const pct = (x) => `${x.toFixed(1)}%`;
 const n = (x) => Number(x).toLocaleString();
@@ -223,6 +229,7 @@ function renderMap(base) {
         <span class="rank">${i + 1}</span>
         ${av(id, 'sq')}
         <span class="bn">${esc(B[id]?.n)}</span>
+        ${cls(id)}
         ${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}
         <span class="wrbig ${wr >= 55 ? 'hi' : ''}">${pct(wr)}</span>
         <span class="ur">${pct(ur)} picked</span>
@@ -234,7 +241,7 @@ function renderMap(base) {
       <li>
         <span class="rk">${i + 6}</span>
         ${av(id, 'sq')}
-        <span class="rn"><b>${esc(B[id]?.n)}${notRanked(id) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${order === 'picked' ? `${pct(wr)} win` : `${pct(ur)} picked`} · ${n(g)} games</span></span>
+        <span class="rn"><b>${esc(B[id]?.n)} ${cls(id)}${notRanked(id) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${order === 'picked' ? `${pct(wr)} win` : `${pct(ur)} picked`} · ${n(g)} games</span></span>
         <span class="barwrap"><span class="bar" style="width:${bar(order === 'picked' ? ur : wr).toFixed(0)}%"></span></span>
         <span class="wr">${pct(order === 'picked' ? ur : wr)}</span>
       </li>`).join('')}</ul>` : ''}`;
