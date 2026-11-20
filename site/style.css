@@ -113,6 +113,10 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .mode { margin: 0; color: var(--mc); font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .sub { margin: 6px 0 0; color: var(--dim); font-size: 13px; max-width: 60ch; }
 .sub b { font-family: var(--f-num); font-weight: 500; color: var(--text); }
+.seg { display: inline-flex; background: var(--panel); border: 2px solid var(--line); border-radius: 999px; padding: 3px; margin: 16px 0 0; }
+.seg button { border: 0; background: none; border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 13px; color: var(--dim); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.segnote { font-size: 12.5px; color: var(--dim); margin: 6px 0 0; max-width: 62ch; }
 .warn { margin: 14px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); color: var(--warn); font-size: 13px; }
 
 .top5 { list-style: none; margin: 22px 0 6px; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }

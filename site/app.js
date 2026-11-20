@@ -21,6 +21,9 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
 };
 let rankedOnly = store.get('rankedOnly') === '1';
+// Shadow run: maps carry the current ranking (picks) and the new one (shadow). Viewers can switch.
+let algo = store.get('algo') === 'current' ? 'current' : 'new';
+const view = (m) => (algo === 'new' && m.shadow ? { ...m, ...m.shadow, isNew: true } : m);
 
 // ---------- time ----------
 function left(ms) {
@@ -75,14 +78,14 @@ function tick() {
   markLive();
   if (!mapView.hidden) {
     const el = $('#liveTag');
-    const m = mapsById.get(decodeURIComponent(location.hash.slice(4)));
+    const m = mapsById.get(currentId());
     if (el && m) { const e = liveEvent(m.id); el.textContent = e ? `Live · ${left(Date.parse(e.end) - Date.now())}` : 'Rotated out'; }
   } else renderLive();
 }
 
 function renderFoot() {
   const parts = [];
-  if (DATA.generatedAt) parts.push(`Stats updated ${esc(new Date(DATA.generatedAt).toLocaleDateString())} from ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked and ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games by top players over the last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}`);
+  if (DATA.generatedAt) parts.push(`Stats updated ${esc(new Date(DATA.generatedAt).toLocaleDateString())} from ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked games (${(DATA.battles?.legendary ?? 0).toLocaleString()} Legendary+, ${(DATA.battles?.masters ?? 0).toLocaleString()} Masters+) and ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games over the last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}`);
   if (ROT.fetchedAt) parts.push(`timers checked ${ago(ROT.fetchedAt)}`);
   $('#foot').innerHTML = `${parts.join(' · ')}<br>Images from <a href="https://brawlify.com" rel="noopener">Brawlify</a>. Not affiliated with, endorsed or sponsored by Supercell.`;
 }
@@ -118,7 +121,7 @@ function renderLive() {
   $('#liveNote').textContent = stale ? `last checked ${ago(ROT.fetchedAt)}` : 'time left in rotation';
   $('#live').innerHTML = evs.map((e) => {
     const ms = Date.parse(e.end) - now;
-    return `<a class="lcard ${ms <= 0 ? 'ended' : ''}" href="#/m/${encodeURIComponent(e.id)}" style="--mc:${esc(e.modeColor)}">
+    return `<a class="lcard ${ms <= 0 ? 'ended' : ''}" href="#m-${encodeURIComponent(e.id)}" style="--mc:${esc(e.modeColor)}">
       ${e.img ? `<img class="thumb" src="${esc(e.img)}" alt="">` : '<span class="thumb"></span>'}
       <span class="lt"><span class="lm">${esc(e.mode)}</span><span class="ln">${esc(e.map)}</span>
       <span class="lx">${ms <= 0 ? 'Next map soon' : left(ms)}</span></span></a>`;
@@ -135,7 +138,7 @@ function renderResults() {
       <span class="dot" style="--mc:${esc(m.modeColor || '#888')}"></span>
       <span class="name">${highlight(m.name)}</span>
       <span class="meta">
-        <span class="minis">${m.picks.slice(0, 3).map((p) => av(p[0])).join('')}</span>
+        <span class="minis">${view(m).picks.slice(0, 3).map((p) => av(p[0])).join('')}</span>
         ${m.ranked ? '<b class="tag">Ranked</b>' : ''}${m.active ? '<b class="tag live">Live</b>' : ''}
         <span class="mname">${esc(m.mode)}</span><span class="enter">↵</span>
       </span>
@@ -164,15 +167,26 @@ const n = (x) => Number(x).toLocaleString();
 function basisText(m) {
   const d = DATA.window?.days ?? 14;
   const days = d === 1 ? 'last day' : `last ${d} days`;
+  if (m.basis === 'masters') return `Based on <b>${n(m.sample)}</b> Ranked games where every player was Masters or higher, ${days}.`;
+  if (m.basis === 'legendary') return `Based on <b>${n(m.sample)}</b> Ranked games where every player was Legendary or higher, ${days}.`;
   if (m.basis === 'ranked') return `Based on <b>${n(m.sample)}</b> Ranked games by top players, ${days}.`;
   if (m.basis === 'mixed') return `Based on <b>${n(m.sample)}</b> Ranked and high-trophy games by top players, ${days}.`;
   return `Based on <b>${n(m.sample)}</b> trophy games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies, ${days}.`;
 }
 
-function renderMap(m) {
+function renderMap(base) {
+  const m = view(base);
   const e = liveEvent(m.id);
+  const sw = base.shadow ? `
+    <div class="seg" role="group" aria-label="Ranking">
+      <button data-algo="new" aria-pressed="${algo === 'new'}">New ranking</button>
+      <button data-algo="current" aria-pressed="${algo === 'current'}">Current</button>
+    </div>
+    <p class="segnote">${algo === 'new'
+      ? 'Trial run. Uses only Legendary+ or Masters+ Ranked games when a map has enough, and counts how often good players pick each brawler.'
+      : 'All Ranked games (or high-trophy games), adjusted for skill and game count.'}</p>` : '';
   const head = `
-    <a class="back" href="#/">← All maps</a>
+    <a class="back" href="#">← All maps</a>
     <div class="maphead" style="--mc:${esc(m.modeColor || '#888')}">
       ${m.img ? `<img class="mapimg" src="${esc(m.img)}" alt="">` : ''}
       <div>
@@ -180,11 +194,12 @@ function renderMap(m) {
         <h1>${esc(m.name)}</h1>
         ${m.picks.length ? `<p class="sub">${basisText(m)}</p>` : ''}
       </div>
-    </div>`;
+    </div>${sw}`;
   if (!m.picks.length) {
     mapView.innerHTML = head + (m.solo
       ? `<p class="empty">Picks are only worked out for team modes. ${esc(m.mode)} isn't covered yet.</p>`
       : `<p class="empty">Not enough high-skill games on this map yet. Picks appear once top players have played it ${n(15)}+ times.</p>`);
+    bindSwitch(base);
     return;
   }
   const top = m.picks.slice(0, 5);
@@ -203,7 +218,7 @@ function renderMap(m) {
         <span class="ur">${pct(ur)} picked</span>
         <span class="ur">${n(g)} games</span>
       </li>`).join('')}</ol>
-    <p class="legend"><b>Win %</b> is an estimate against an average pick, where 50% is average. It's adjusted for skill: the top players we sample won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won. Brawlers with few games are pulled toward 50% so luck can't put them on top. <b>Picked</b> is the share of teams that played it.</p>
+    <p class="legend"><b>Win %</b> is an estimate against an average pick, where 50% is average. It's adjusted for skill: the top players we sample won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won. Brawlers with few games are pulled toward ${m.isNew ? 'a starting point set by how often good players pick them' : '50%'} so luck can't put them on top. <b>Picked</b> is the share of teams that played it.</p>
     ${rest.length ? `<h2>Also strong <small>ranks 6–${m.picks.length}</small></h2>
     <ul class="rest">${rest.map(([id, wr, ur, , g], i) => `
       <li>
@@ -213,12 +228,26 @@ function renderMap(m) {
         <span class="barwrap"><span class="bar" style="width:${bar(wr).toFixed(0)}%"></span></span>
         <span class="wr">${pct(wr)}</span>
       </li>`).join('')}</ul>` : ''}`;
+  bindSwitch(base);
+}
+
+function bindSwitch(base) {
+  mapView.querySelectorAll('[data-algo]').forEach((b) => b.addEventListener('click', () => {
+    algo = b.dataset.algo;
+    store.set('algo', algo);
+    renderMap(base);
+  }));
 }
 
 // ---------- routing ----------
+// Map pages are #m-<id> (older links #/m/<id> still work).
+function currentId() {
+  const h = location.hash.match(/^#(?:m-|\/m\/)(.+)$/);
+  return h ? decodeURIComponent(h[1]) : null;
+}
 function route() {
-  const hm = location.hash.match(/^#\/m\/(.+)$/);
-  const map = hm && mapsById.get(decodeURIComponent(hm[1]));
+  const id = currentId();
+  const map = id && mapsById.get(id);
   if (map) {
     renderMap(map);
     mapView.hidden = false;
@@ -235,7 +264,7 @@ function route() {
 }
 
 function open(id) {
-  location.hash = `#/m/${encodeURIComponent(id)}`;
+  location.hash = `#m-${encodeURIComponent(id)}`;
   q.blur();
 }
 
@@ -264,9 +293,9 @@ $('#chips').addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === '/' && document.activeElement !== q) {
     e.preventDefault();
-    if (!mapView.hidden) location.hash = '#/';
+    if (!mapView.hidden) location.hash = '';
     q.focus();
-  } else if (e.key === 'Escape' && !mapView.hidden) location.hash = '#/';
+  } else if (e.key === 'Escape' && !mapView.hidden) location.hash = '';
 });
 window.addEventListener('hashchange', route);
 

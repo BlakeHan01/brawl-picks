@@ -21,6 +21,11 @@ export async function getJSON(url, headers = {}, tries = 3) {
         const body = await r.text().catch(() => '');
         throw Object.assign(new Error(`${r.status} ${body.slice(0, 200)}`), { fatal: true });
       }
+      if (r.status === 429 || r.status === 503) {
+        // throttled: wait longer before retrying
+        await new Promise((res) => setTimeout(res, 3000 * (i + 1)));
+        throw new Error(`${r.status} throttled`);
+      }
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
       return await r.json();
     } catch (e) {

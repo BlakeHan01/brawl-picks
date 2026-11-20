@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { readFile, writeFile, mkdtemp, mkdir, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { tally, buildMaps } from '../scripts/fetch-data.mjs';
+import { tally, buildMaps, crawlTags, rankBrawlers } from '../scripts/fetch-data.mjs';
 import { parseRotation } from '../scripts/fetch-rotation.mjs';
 import { parseTime, modeName } from '../scripts/lib.mjs';
 
@@ -112,6 +112,47 @@ test('top players winning a lot does not inflate their picks', () => {
   assert.ok(!get(99), 'under 10 games: not listed');
 });
 
+test('Ranked games are split by the lowest rank in the game', () => {
+  const items = [
+    battle('#P1', 0, { trophies: 15 }), // Mythic: all Ranked only
+    battle('#P1', 1, { trophies: 17 }), // Legendary
+    battle('#P1', 2, { trophies: 20 }), // Masters
+  ];
+  items[2].battle.teams[1][2].brawler.trophies = 18; // one Legendary player: not a Masters+ game
+  const d = tally([{ items }], ['#P1'], 0);
+  const m = d.maps['gemGrab|hardrockmine'];
+  assert.equal(m.r.n, 3);
+  assert.equal(m.rL.n, 2);
+  assert.equal(m.rM.n, 0);
+  assert.equal(d.battles.legendary, 2);
+});
+
+test('crawl picks Legendary+ players met in Ranked games', () => {
+  const items = [battle('#P1', 0, { trophies: 17 }), battle('#P1', 1, { trophies: 12 }), battle('#P1', 2, { type: 'ranked', trophies: 2000 })];
+  const got = crawlTags([{ items }], new Set(['#P1']), 100);
+  assert.equal(got.length, 5); // the 5 other players of the Legendary game only
+  assert.ok(!got.includes('#P1'));
+  assert.equal(crawlTags([{ items }], new Set(), 2).length, 2);
+});
+
+test('new ranking: Masters+ when available, pick rate nudges the prior', () => {
+  const items = [];
+  for (let i = 0; i < 200; i++) items.push(battle('#P1', i, { trophies: 20, win: i % 2 === 0 }));
+  const [m] = buildMaps([tally([{ items }], ['#P1'], 0)], new Set());
+  assert.equal(m.basis, 'ranked');
+  assert.equal(m.shadow.basis, 'masters');
+  assert.equal(m.shadow.sample, 200);
+  assert.equal(m.mastersGames, 200);
+
+  // two brawlers, both exactly 50% raw; the one picked 10x more often ranks higher with the pick prior
+  const a = { n: 100, sw: 50, b: { 1: [50, 25, 50, 25], 2: [5, 3, 5, 2], 3: [20, 10, 20, 10] } };
+  const flat = rankBrawlers(a);
+  const pp = rankBrawlers(a, { pickPrior: true });
+  assert.equal(flat.picks.find((p) => p[0] === 1)[1], 50);
+  assert.ok(pp.picks.find((p) => p[0] === 1)[1] > 50);
+  assert.ok(pp.picks.find((p) => p[0] === 2)[1] < 50);
+});
+
 test('parseRotation turns API slots into ISO times', () => {
   const r = parseRotation([
     { startTime: '20261120T080000.000Z', endTime: '20261121T080000.000Z', slotId: 2, event: { id: 15000853, mode: 'brawlHockey', map: 'Below Zero', modifiers: [] } },
@@ -162,7 +203,7 @@ test('end to end: stats + rotation from the mock API', async () => {
   await mkdir(daily);
   // an old file that should drop out of the 14-day window
   for (let k = 0; k < 15; k++) await writeFile(join(daily, `2020-01-${String(k + 1).padStart(2, '0')}.json`), JSON.stringify({ battles: { ranked: 0, trophy: 0 }, maps: {} }));
-  const env = { BS_API_BASE: base, BS_API_KEY: 'KEY', BS_REGIONS: 'global', MIN_TROPHIES: '500', OUT: join(dir, 'data.json'), DAILY_DIR: daily };
+  const env = { BS_API_BASE: base, BS_API_KEY: 'KEY', BS_REGIONS: 'global', CRAWL_LIMIT: '0', MIN_TROPHIES: '500', OUT: join(dir, 'data.json'), DAILY_DIR: daily };
   const r = await run('scripts/fetch-data.mjs', env);
   const rot = await run('scripts/fetch-rotation.mjs', { ...env, OUT: join(dir, 'rotation.json') });
   srv.close();

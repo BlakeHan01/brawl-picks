@@ -1,11 +1,11 @@
 name: Data + deploy
 
 # Every 30 min: refresh the event rotation (map timers).
-# Daily at 09:17 UTC: also pull the per-map brawler stats.
+# Every 3 hours (at :17): also pull the per-map brawler stats.
 # Pages is redeployed only when something changed (or on push / manual run).
 on:
   schedule:
-    - cron: "17 9 * * *"
+    - cron: "17 */3 * * *"
     - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
@@ -32,7 +32,7 @@ jobs:
       deploy: ${{ steps.commit.outputs.deploy }}
     env:
       BS_API_KEY: ${{ secrets.BS_API_KEY }}
-      WANT_STATS: ${{ github.event.schedule == '17 9 * * *' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.stats) }}
+      WANT_STATS: ${{ github.event.schedule == '17 */3 * * *' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.stats) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,8 +48,6 @@ jobs:
         id: stats
         if: env.WANT_STATS == 'true'
         continue-on-error: true # keep serving the last good data if the pull fails
-        env:
-          DIAG: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
         run: node scripts/fetch-data.mjs
 
       - name: Commit changes
