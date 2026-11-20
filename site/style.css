@@ -148,6 +148,7 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .nr { font: 800 9.5px var(--f-body); text-transform: uppercase; letter-spacing: .04em; color: var(--warn); background: var(--panel2); border-radius: 4px; padding: 1px 5px; white-space: nowrap; vertical-align: middle; }
 .wrbig { font: 700 18px var(--f-num); margin-top: 2px; }
 .wrbig.hi { color: var(--good); }
+.wrbig small { font: 600 10px var(--f-body); color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
 .ur { font: 11px var(--f-num); color: var(--dim); }
 
 .legend { font-size: 12px; color: var(--dim); margin: 10px 0 0; }

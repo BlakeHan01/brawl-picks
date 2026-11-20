@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { readFile, writeFile, mkdtemp, mkdir, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { tally, buildMaps, crawlTags, rankBrawlers } from '../scripts/fetch-data.mjs';
+import { tally, buildMaps, crawlTags, fitModel, scoreRows } from '../scripts/fetch-data.mjs';
 import { parseRotation } from '../scripts/fetch-rotation.mjs';
 import { parseTime, modeName } from '../scripts/lib.mjs';
 
@@ -70,27 +70,29 @@ test('tally de-duplicates games seen from both sides and respects the cutoff', (
   assert.equal(d2.battles.ranked, 1);
 });
 
-test('buildMaps: ranked-only once enough ranked games, else mixed/trophy with low flag', () => {
+// rows: [brawlerId, score %, win %, pick %, games, ban %]
+test('buildMaps: Legendary+ when enough, trophy maps otherwise, low flag', () => {
   const items = [];
   for (let i = 0; i < 50; i++) items.push(battle('#P1', i, { win: i % 3 !== 0 }));
   for (let i = 0; i < 20; i++) items.push(battle('#P1', 100 + i, { map: 'Below Zero', id: 15000853, mode: 'brawlHockey', type: 'ranked' }));
   for (let i = 0; i < 5; i++) items.push(battle('#P1', 200 + i, { map: 'Tiny', id: 1, mode: 'heist', type: 'ranked' }));
   const day = tally([{ items }], ['#P1'], 0);
-  const maps = buildMaps([day, day], new Set(['hardrockmine']));
+  const { maps, model } = buildMaps([day, day], new Set(['hardrockmine']));
   assert.equal(maps.length, 2); // Tiny has 10 games across both days: below the minimum
   const hrm = maps.find((m) => m.name === 'Hard Rock Mine');
-  assert.equal(hrm.basis, 'ranked');
+  assert.equal(hrm.basis, 'legendary'); // 100 Masters+ games is under 150, Legendary+ is enough
   assert.equal(hrm.sample, 100);
   assert.equal(hrm.ranked, true);
   assert.equal(hrm.low, true);
   assert.equal(hrm.mode, 'Gem Grab');
-  for (let i = 1; i < hrm.picks.length; i++) assert.ok(hrm.picks[i - 1][1] >= hrm.picks[i][1], 'sorted by estimate');
-  assert.equal(hrm.picks[0][4], 100); // games column
-  assert.equal(hrm.picks[0][2], 50); // in half of all teams
+  for (let i = 1; i < hrm.rows.length; i++) assert.ok(hrm.rows[i - 1][1] >= hrm.rows[i][1], 'sorted by score');
+  assert.equal(hrm.rows[0][4], 100); // games column
+  assert.equal(hrm.rows[0][3], 50); // in half of all teams
   const bz = maps.find((m) => m.name === 'Below Zero');
   assert.equal(bz.basis, 'trophy');
   assert.equal(bz.ranked, false);
   assert.equal(bz.mode, 'Brawl Hockey');
+  assert.ok(model.ranked.score.K >= 40 && model.trophy.win.K >= 40);
 });
 
 test('top players winning a lot does not inflate their picks', () => {
@@ -99,17 +101,53 @@ test('top players winning a lot does not inflate their picks', () => {
   for (let i = 0; i < 100; i++) items.push(battle('#P1', i, { brawlers: [1, 10, 11, 20, 21, 22], win: i % 10 < 8 }));
   for (let i = 0; i < 100; i++) items.push(battle('#P1', 200 + i, { brawlers: [2, 10, 11, 20, 21, 22], win: i % 10 < 6 }));
   for (let i = 0; i < 3; i++) items.push(battle('#P1', 500 + i, { brawlers: [99, 10, 11, 20, 21, 22] }));
-  const [m] = buildMaps([tally([{ items }], ['#P1'], 0)], new Set());
-  const get = (id) => m.picks.find((p) => p[0] === id);
+  const { maps: [m] } = buildMaps([tally([{ items }], ['#P1'], 0)], new Set());
+  const get = (id) => m.rows.find((p) => p[0] === id);
   assert.equal(m.topSideWin, 70.4); // 143 of 203 games won by the top player's side
-  assert.equal(get(1)[3], 59.6); // A: about 10 points better than the player's usual
-  assert.equal(get(2)[3], 39.6); // B: about 10 points worse, despite a 60% raw win rate
-  assert.equal(get(1)[1], 56.8); // shown estimate: shrunk toward 50 with a 40-game prior
-  assert.equal(get(2)[1], 42.5);
-  assert.ok(Math.abs(get(10)[1] - 50) < 0.1, 'teammates on every game: neutral');
-  assert.ok(Math.abs(get(20)[1] - 50) < 0.1, 'enemies on every game: neutral');
-  assert.equal(m.picks[0][0], 1);
+  // too few brawlers to fit a model: default prior worth 150 games, no presence effect
+  assert.equal(get(1)[2], 53.8); // A: 80% raw is ~9.6 points above the player's usual, shrunk
+  assert.equal(get(2)[2], 45.8); // B: 60% raw is ~10.4 points below, despite looking fine
+  assert.ok(Math.abs(get(10)[2] - 50) < 0.1, 'teammates on every game: neutral');
+  assert.ok(Math.abs(get(20)[2] - 50) < 0.1, 'enemies on every game: neutral');
+  assert.equal(m.rows[0][0], 1);
   assert.ok(!get(99), 'under 10 games: not listed');
+});
+
+test('bans are counted once per game, per rank group', () => {
+  const items = [battle('#P1', 0, { trophies: 20 }), battle('#P1', 1, { trophies: 17 })];
+  for (const it of items) {
+    const ps = it.battle.teams.flat();
+    ps.forEach((p, k) => { p.bannedBrawler = { id: k < 4 ? 500 : 501 }; }); // 500 banned by four players
+  }
+  const m = tally([{ items }], ['#P1'], 0).maps['gemGrab|hardrockmine'];
+  assert.deepEqual(m.r.bans, { 500: 2, 501: 2 });
+  assert.deepEqual(m.rL.bans, { 500: 2, 501: 2 });
+  assert.deepEqual(m.rM.bans, { 500: 1, 501: 1 });
+});
+
+test('fitModel finds a presence effect only when there is one', () => {
+  // 30 maps x 12 brawlers. Presence (pick+ban) varies; true win rate either follows it or not.
+  const make = (linked) => Array.from({ length: 30 }, (_, mi) => Array.from({ length: 12 }, (_, b) => {
+    const pres = 0.02 * Math.exp(b / 4); // pick + ban share, spread over ~e^3
+    const trueWr = 0.5 + (linked ? 0.02 * (b / 4 - 1.5) : 0) + 0.01 * Math.sin(mi * 7 + b * 3);
+    const g = 400;
+    return { id: b, g, excess: g * (trueWr - 0.5), pick: pres * 0.7, ban: pres * 0.3 };
+  }));
+  const linked = fitModel(make(true));
+  const none = fitModel(make(false));
+  assert.ok(Math.abs(linked.slope - 0.02) < 0.003, `slope ${linked.slope}`);
+  assert.ok(none.slope < 0.002, `slope ${none.slope}`);
+  assert.ok(linked.K > 40 && none.K > 40);
+  // with a presence effect, a brawler with few games but high presence scores above a rare one
+  const rows = [
+    { id: 1, g: 12, excess: 0, pick: 0.3, ban: 0.2 },
+    { id: 2, g: 12, excess: 0, pick: 0.01, ban: 0 },
+    ...Array.from({ length: 8 }, (_, k) => ({ id: 10 + k, g: 100, excess: 0, pick: 0.05, ban: 0.01 })),
+  ];
+  const s = scoreRows(rows, linked, { K: 150 });
+  const sc = (id) => s.find((r) => r.id === id);
+  assert.ok(sc(1).score > 0.5 && sc(2).score < 0.5);
+  assert.equal(sc(1).win, 0.5); // win rate ignores presence
 });
 
 test('Ranked games are split by the lowest rank in the game', () => {
@@ -135,23 +173,13 @@ test('crawl picks Legendary+ players met in Ranked games', () => {
   assert.equal(crawlTags([{ items }], new Set(), 2).length, 2);
 });
 
-test('new ranking: Masters+ when available, pick rate nudges the prior', () => {
+test('Masters+ once a map has 150 Masters+ games', () => {
   const items = [];
   for (let i = 0; i < 200; i++) items.push(battle('#P1', i, { trophies: 20, win: i % 2 === 0 }));
-  const [m] = buildMaps([tally([{ items }], ['#P1'], 0)], new Set());
-  assert.equal(m.basis, 'ranked');
-  assert.equal(m.shadow.basis, 'masters');
-  assert.equal(m.shadow.sample, 200);
+  const { maps: [m] } = buildMaps([tally([{ items }], ['#P1'], 0)], new Set());
+  assert.equal(m.basis, 'masters');
+  assert.equal(m.sample, 200);
   assert.equal(m.mastersGames, 200);
-
-  // two brawlers, both exactly 50% raw; the one picked 10x more often ranks higher with the pick prior
-  const a = { n: 100, sw: 50, b: { 1: [50, 25, 50, 25], 2: [5, 3, 5, 2], 3: [20, 10, 20, 10] } };
-  const flat = rankBrawlers(a);
-  const pp = rankBrawlers(a, { pickPrior: true });
-  assert.equal(flat.picks.find((p) => p[0] === 1)[1], 50);
-  assert.ok(pp.picks.find((p) => p[0] === 1)[1] > 50);
-  assert.ok(pp.picks.find((p) => p[0] === 2)[1] < 50);
-  assert.deepEqual(pp.popular.map((p) => p[0]), [1, 3, 2]); // most games first
 });
 
 test('parseRotation turns API slots into ISO times', () => {

@@ -21,11 +21,14 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
 };
 let rankedOnly = store.get('rankedOnly') === '1';
-// Shadow run: maps carry the current ranking (picks) and the new one (shadow). Viewers can switch.
-let algo = store.get('algo') === 'current' ? 'current' : 'new';
-// Order on map pages: best estimated win rate, or most played by these (good) players.
-let order = store.get('order') === 'picked' ? 'picked' : 'win';
-const view = (m) => (algo === 'new' && m.shadow ? { ...m, ...m.shadow, isNew: true } : m);
+// Order on map pages. Rows: [brawlerId, score %, win %, pick %, games, ban %].
+const ORDERS = {
+  score: { label: 'Score', col: 1, head: 'Also strong' },
+  win: { label: 'Win rate', col: 2, head: 'Also strong' },
+  picked: { label: 'Most picked', col: 3, head: 'Also popular' },
+};
+let order = ORDERS[store.get('order')] ? store.get('order') : 'score';
+const rowsOf = (m) => m.rows || [];
 
 // ---------- time ----------
 function left(ms) {
@@ -140,7 +143,7 @@ function renderResults() {
       <span class="dot" style="--mc:${esc(m.modeColor || '#888')}"></span>
       <span class="name">${highlight(m.name)}</span>
       <span class="meta">
-        <span class="minis">${view(m).picks.slice(0, 3).map((p) => av(p[0])).join('')}</span>
+        <span class="minis">${rowsOf(m).slice(0, 3).map((p) => av(p[0])).join('')}</span>
         ${m.ranked ? '<b class="tag">Ranked</b>' : ''}${m.active ? '<b class="tag live">Live</b>' : ''}
         <span class="mname">${esc(m.mode)}</span><span class="enter">↵</span>
       </span>
@@ -183,17 +186,9 @@ function basisText(m) {
   return `Based on <b>${n(m.sample)}</b> trophy games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies, ${days}.`;
 }
 
-function renderMap(base) {
-  const m = view(base);
+function renderMap(m) {
   const e = liveEvent(m.id);
-  const sw = base.shadow ? `
-    <div class="seg" role="group" aria-label="Ranking">
-      <button data-algo="new" aria-pressed="${algo === 'new'}">New ranking</button>
-      <button data-algo="current" aria-pressed="${algo === 'current'}">Current</button>
-    </div>
-    <p class="segnote">${algo === 'new'
-      ? 'Trial run. Uses only Legendary+ or Masters+ Ranked games when a map has enough, and counts how often good players pick each brawler.'
-      : 'All Ranked games (or high-trophy games), adjusted for skill and game count.'}</p>` : '';
+  const rows = rowsOf(m);
   const head = `
     <a class="back" href="#">← All maps</a>
     <div class="maphead" style="--mc:${esc(m.modeColor || '#888')}">
@@ -201,64 +196,69 @@ function renderMap(base) {
       <div>
         <p class="mode">${esc(m.mode)} ${m.ranked ? '<b class="tag">Ranked</b>' : ''}${e ? `<b class="tag live" id="liveTag">Live · ${left(Date.parse(e.end) - Date.now())}</b>` : ''}</p>
         <h1>${esc(m.name)}</h1>
-        ${m.picks.length ? `<p class="sub">${basisText(m)}</p>` : ''}
+        ${rows.length ? `<p class="sub">${basisText(m)}</p>` : ''}
       </div>
-    </div>${sw}`;
-  if (!m.picks.length) {
+    </div>`;
+  if (!rows.length) {
     mapView.innerHTML = head + (m.solo
       ? `<p class="empty">Picks are only worked out for team modes. ${esc(m.mode)} isn't covered yet.</p>`
       : `<p class="empty">Not enough high-skill games on this map yet. Picks appear once top players have played it ${n(15)}+ times.</p>`);
-    bindSwitch(base);
     return;
   }
-  const list = order === 'picked' && m.popular?.length ? m.popular : m.picks;
+  const o = ORDERS[order];
+  const list = [...rows].sort((x, y) => y[o.col] - x[o.col] || y[1] - x[1]).slice(0, 20);
   const top = list.slice(0, 5);
   const rest = list.slice(5);
-  const vals = list.map((p) => (order === 'picked' ? p[2] : p[1]));
+  const vals = list.map((r) => r[o.col]);
   const hi = Math.max(...vals), lo = Math.min(...vals);
-  const bar = (s) => 12 + (88 * (s - lo)) / Math.max(0.1, hi - lo);
+  const bar = (v) => 12 + (88 * (v - lo)) / Math.max(0.1, hi - lo);
+  const hasBans = rows.some((r) => r[5] > 0);
   const B = DATA.brawlers;
+  const big = (r) => (order === 'picked' ? `${pct(r[3])}` : pct(r[o.col]));
+  const bigLabel = order === 'score' ? 'score' : order === 'win' ? 'win' : 'picked';
+  const sub = (r) => [
+    order !== 'win' ? `${pct(r[2])} win` : null,
+    order !== 'picked' ? `${pct(r[3])} picked` : null,
+    hasBans ? `${pct(r[5])} banned` : null,
+  ].filter(Boolean);
   mapView.innerHTML = head + `
     ${m.low ? '<p class="warn">Few games on this map so far. Treat these picks as a rough guide.</p>' : ''}
     <div class="seg small" role="group" aria-label="Order">
-      <button data-order="win" aria-pressed="${order === 'win'}">Best win rate</button>
-      <button data-order="picked" aria-pressed="${order === 'picked'}">Most picked</button>
+      ${Object.entries(ORDERS).map(([k, v]) => `<button data-order="${k}" aria-pressed="${order === k}">${v.label}</button>`).join('')}
     </div>
-    <ol class="top5">${top.map(([id, wr, ur, , g], i) => `
+    <ol class="top5">${top.map((r, i) => `
       <li>
         <span class="rank">${i + 1}</span>
-        ${av(id, 'sq')}
-        <span class="bn">${esc(B[id]?.n)}</span>
-        ${cls(id)}
-        ${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}
-        <span class="wrbig ${wr >= 55 ? 'hi' : ''}">${pct(wr)}</span>
-        <span class="ur">${pct(ur)} picked</span>
-        <span class="ur">${n(g)} games</span>
+        ${av(r[0], 'sq')}
+        <span class="bn">${esc(B[r[0]]?.n)}</span>
+        ${cls(r[0])}
+        ${notRanked(r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
+        <span class="wrbig ${order !== 'picked' && r[o.col] >= 55 ? 'hi' : ''}">${big(r)}<small> ${bigLabel}</small></span>
+        ${sub(r).map((t) => `<span class="ur">${t}</span>`).join('')}
+        <span class="ur">${n(r[4])} games</span>
       </li>`).join('')}</ol>
-    <p class="legend">${order === 'picked' ? '<b>Most picked</b> orders brawlers by how often these players chose them on this map. Good players already pick well, so popular brawlers are the meta even when their win rate sits near 50%. ' : ''}<b>Win %</b> is an estimate against an average pick, where 50% is average. It's adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won. Brawlers with few games are pulled toward ${m.isNew ? 'a starting point set by how often good players pick them' : '50%'} so luck can't put them on top. <b>Picked</b> is the share of teams that played it.</p>
-    ${rest.length ? `<h2>${order === 'picked' ? 'Also popular' : 'Also strong'} <small>ranks 6–${list.length}</small></h2>
-    <ul class="rest">${rest.map(([id, wr, ur, , g], i) => `
+    <p class="legend">${legend(m, hasBans)}</p>
+    ${rest.length ? `<h2>${o.head} <small>ranks 6–${list.length}</small></h2>
+    <ul class="rest">${rest.map((r, i) => `
       <li>
         <span class="rk">${i + 6}</span>
-        ${av(id, 'sq')}
-        <span class="rn"><b>${esc(B[id]?.n)} ${cls(id)}${notRanked(id) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${order === 'picked' ? `${pct(wr)} win` : `${pct(ur)} picked`} · ${n(g)} games</span></span>
-        <span class="barwrap"><span class="bar" style="width:${bar(order === 'picked' ? ur : wr).toFixed(0)}%"></span></span>
-        <span class="wr">${pct(order === 'picked' ? ur : wr)}</span>
+        ${av(r[0], 'sq')}
+        <span class="rn"><b>${esc(B[r[0]]?.n)} ${cls(r[0])}${notRanked(r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b><span>${[...sub(r), `${n(r[4])} games`].join(' · ')}</span></span>
+        <span class="barwrap"><span class="bar" style="width:${bar(r[o.col]).toFixed(0)}%"></span></span>
+        <span class="wr">${big(r)}</span>
       </li>`).join('')}</ul>` : ''}`;
-  bindSwitch(base);
-}
-
-function bindSwitch(base) {
   mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => {
     order = b.dataset.order;
     store.set('order', order);
-    renderMap(base);
+    renderMap(m);
   }));
-  mapView.querySelectorAll('[data-algo]').forEach((b) => b.addEventListener('click', () => {
-    algo = b.dataset.algo;
-    store.set('algo', algo);
-    renderMap(base);
-  }));
+}
+
+function legend(m, hasBans) {
+  const skill = `Results are adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won (50% = average).`;
+  if (order === 'score') return `<b>Score</b> is our best guess at each brawler's win rate here. It starts from how often good players pick${hasBans ? ' or ban' : ''} it on this map and moves toward its actual results as games add up, with weights fitted from the data. ${skill}`;
+  if (order === 'win') return `<b>Win rate</b> uses results only: few games are pulled toward 50% so luck can't put a brawler on top. ${skill}`;
+  return `<b>Most picked</b> orders brawlers by how often these players chose them here. Popular brawlers are safe meta picks, but they don't always win the most. ${skill}`;
 }
 
 // ---------- routing ----------

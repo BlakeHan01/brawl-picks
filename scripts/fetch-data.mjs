@@ -12,9 +12,10 @@
 // WINDOW_DAYS days. The API only keeps a player's last 25 games, so a backfill (BACKFILL_DAYS) reads
 // many players to reach older games; older days come out thinner.
 //
-// Two rankings are written per map (shadow run):
-//   picks   current: all Ranked games (or high-trophy games), skill-adjusted, shrunk to 50%
-//   shadow  new: Masters+ / Legendary+ games when there are enough, and pick rate informs the prior
+// Per map, brawlers get (see "2. rank brawlers"):
+//   win    skill-adjusted win rate, shrunk toward 50% by a strength fitted from the data
+//   score  the same, shrunk toward a starting point set by presence (pick + ban rate) instead
+//   pick %, ban %, games
 //
 // Env:
 //   BS_API_KEY       official API key (developer.brawlstars.com), required
@@ -49,32 +50,29 @@ const STATE = join(DAILY_DIR, '..', 'state.json');
 
 export const LEGENDARY = 16;
 export const MASTERS = 19;
-const TOP_N = 20; // brawlers kept per map
 const MIN_MAP_BATTLES = 15; // fewer than this: map gets no picks
 const PREFER_RANKED = 40; // ranked-only stats once a map has this many ranked games
 const PREFER_LEGENDARY = 40; // new ranking: Legendary+ only from this many games
 const PREFER_MASTERS = 150; // new ranking: Masters+ only from this many games
 const LOW_SAMPLE = 150; // below this the site labels the picks "few games"
 const MIN_BRAWLER_GAMES = 10;
-// Shrink toward the prior as if every brawler also had PRIOR_GAMES games at the prior.
-// Picking the top 5 out of ~80 brawlers rewards luck; this keeps small samples from winning.
-const PRIOR_GAMES = 40;
-// New ranking: the prior is not flat 50%. Brawlers good players pick a lot on this map start a
-// little higher, rare ones a little lower: PICK_WEIGHT points per e-fold of pick rate vs. the median.
-const PICK_WEIGHT = 2;
+const MAX_ROWS = 40; // brawlers kept per map
 const DAY_VERSION = 3;
 
 const readJSON = (p) => readFile(p, 'utf8').then(JSON.parse, () => null);
 const RANKED_TYPES = new Set(['soloRanked', 'teamRanked']);
 // Per map and group: n games, sw = games won by the sampled player's side,
-// b[brawlerId] = [games, wins] on the sampled side, then [games, wins] on the other side.
+// b[brawlerId] = [games, wins] on the sampled side, then [games, wins] on the other side,
+// bans[brawlerId] = Ranked games in which it was banned (each player bans one brawler).
 // Groups: r = all Ranked, rL = Ranked with every player Legendary+, rM = Masters+, t = high-trophy.
 const GROUPS = ['r', 'rL', 'rM', 't'];
-const blank = () => ({ n: 0, sw: 0, b: {} });
+const blank = () => ({ n: 0, sw: 0, b: {}, bans: {} });
 const emptyDay = () => ({ v: DAY_VERSION, battles: { ranked: 0, legendary: 0, masters: 0, trophy: 0, skippedLowTrophy: 0, players: 0 }, maps: {} });
 
 function addGame(a, teams, mine, mineWon) {
   a.n++;
+  const banned = new Set(teams.flat().map((p) => p.bannedBrawler?.id).filter(Boolean));
+  for (const id of banned) a.bans[id] = (a.bans[id] || 0) + 1;
   if (mineWon) a.sw++;
   teams.forEach((team, ti) => {
     const side = ti === mine ? 0 : 2;
@@ -164,38 +162,63 @@ export function crawlTags(logs, have, limit) {
 // ---------- 2. rank brawlers ----------
 const r1 = (x) => Math.round(x * 10) / 10;
 
-// Top players win most of their games, so raw win rates flatter whatever they pick.
-// Each brawler is measured against how often its side won on this map instead:
-// excess = wins above what that side's average would give.
-export function rankBrawlers(a, { pickPrior = false } = {}) {
-  const pS = a.sw / a.n; // how often the sampled player's side won here
-  let rows = Object.entries(a.b).map(([id, [gS, wS, gO, wO]]) => {
+// Per brawler on one map: games, skill-adjusted excess wins, pick share and ban share.
+// Top players win most of their games, so raw win rates flatter whatever they pick. Each brawler is
+// measured against how often its side won on this map instead: excess = wins above that side's average.
+export function brawlerRows(a) {
+  const pS = a.sw / a.n;
+  return Object.entries(a.b).map(([id, [gS, wS, gO, wO]]) => {
     const g = gS + gO;
-    return { id: Number(id), g, excess: wS - gS * pS + (wO - gO * (1 - pS)), ur: (100 * g) / (2 * a.n) };
-  }).filter((p) => p.g >= MIN_BRAWLER_GAMES);
-  const urs = rows.map((p) => p.ur).sort((x, y) => x - y);
-  const median = urs[Math.floor(urs.length / 2)] || 1;
-  rows = rows.map((p) => {
-    const prior = pickPrior ? 50 + PICK_WEIGHT * Math.max(-1.5, Math.min(1.5, Math.log(p.ur / median))) : 50;
     return {
-      ...p,
-      // estimated win % vs. an average pick: adjusted for skill, shrunk toward the prior
-      wr: (100 * (0.5 * p.g + p.excess) + PRIOR_GAMES * prior) / (p.g + PRIOR_GAMES),
-      raw: 100 * (0.5 + p.excess / p.g),
+      id: Number(id), g,
+      excess: wS - gS * pS + (wO - gO * (1 - pS)),
+      pick: g / (2 * a.n), // share of teams that played it
+      ban: (a.bans?.[id] || 0) / a.n, // share of games where it was banned
     };
   });
-  const row = (p) => [p.id, r1(p.wr), r1(p.ur), r1(p.raw), p.g];
-  const byPicks = [...rows].sort((x, y) => y.g - x.g || y.wr - x.wr);
-  rows.sort((x, y) => y.wr - x.wr);
-  return {
-    sample: a.n,
-    topSideWin: r1(100 * pS),
-    low: a.n < LOW_SAMPLE,
-    // [brawlerId, estimated win %, use %, skill-adjusted win % before shrinking, games]
-    picks: rows.slice(0, TOP_N).map(row),
-    // same rows, most-played first: what good players actually choose on this map
-    popular: byPicks.slice(0, TOP_N).map(row),
-  };
+}
+
+// "Presence": how often good players pick or ban it here. In draft, a banned brawler can't be
+// picked, so strong brawlers show up in bans as much as in picks.
+const presence = (r) => Math.log(Math.max(r.pick + r.ban, 1e-4));
+
+// Empirical Bayes, fitted on every run from all maps together:
+//   true win rate on a map ~ 50% + slope * (presence vs. the map's median), with spread tau.
+// From that: K = how many games of evidence the starting point is worth (0.25 / tau^2).
+// If presence doesn't predict winning, slope comes out ~0 and this is plain shrinking toward 50%.
+export function fitModel(maps, feature = presence) {
+  const pts = [];
+  for (const rows of maps) {
+    const ok = rows.filter((r) => r.g >= MIN_BRAWLER_GAMES);
+    const med = median(ok.map(feature));
+    for (const r of ok) pts.push({ x: feature(r) - med, y: r.excess / r.g, w: r.g });
+  }
+  if (pts.length < 30) return { K: 150, slope: 0, n: pts.length };
+  let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of pts) { sw += p.w; sx += p.w * p.x; sy += p.w * p.y; sxx += p.w * p.x * p.x; sxy += p.w * p.x * p.y; }
+  const vx = sxx - (sx * sx) / sw;
+  const slope = vx > 1e-9 ? (sxy - (sx * sy) / sw) / vx : 0;
+  let num = 0;
+  for (const p of pts) { const res = p.y - slope * p.x; num += p.w * (res * res) - 0.25; }
+  const tau2 = Math.max(num / sw, 0.25 / 600);
+  return { K: Math.round(Math.min(600, Math.max(40, 0.25 / tau2))), slope: Math.min(0.04, Math.max(0, slope)), n: pts.length };
+}
+function median(xs) { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)] ?? 0; }
+
+// Score each brawler on one map.
+//   win   = skill-adjusted win rate, pulled toward 50% (fitted strength, no presence)
+//   score = the same, but pulled toward a starting point set by presence (fitted slope)
+export function scoreRows(rows, scoreModel, winModel) {
+  const ok = rows.filter((r) => r.g >= MIN_BRAWLER_GAMES);
+  const med = median(ok.map(presence));
+  return ok.map((r) => {
+    const prior = 0.5 + scoreModel.slope * Math.max(-2, Math.min(2, presence(r) - med));
+    return {
+      ...r,
+      score: (0.5 * r.g + r.excess + scoreModel.K * prior) / (r.g + scoreModel.K),
+      win: (0.5 * r.g + r.excess + winModel.K * 0.5) / (r.g + winModel.K),
+    };
+  }).sort((x, y) => y.score - x.score);
 }
 
 function add(into, from) {
@@ -206,6 +229,7 @@ function add(into, from) {
     const s = (into.b[id] ||= [0, 0, 0, 0]);
     for (let k = 0; k < 4; k++) s[k] += v[k];
   }
+  for (const [id, c] of Object.entries(from.bans || {})) into.bans[id] = (into.bans[id] || 0) + c;
 }
 const merged = (...xs) => { const a = blank(); for (const x of xs) add(a, x); return a; };
 
@@ -221,23 +245,32 @@ export function buildMaps(days, rankedPool) {
     }
   }
 
-  const maps = [];
+  // Pick the games each map is ranked from: Masters+ when there are enough, else Legendary+,
+  // else all Ranked, else Ranked + high-trophy games together (specialty maps: trophy games).
+  const chosen = [];
   for (const m of sum.values()) {
-    // current
     let basis, a;
-    if (m.r.n >= PREFER_RANKED) { basis = 'ranked'; a = m.r; }
+    if (m.rM.n >= PREFER_MASTERS) { basis = 'masters'; a = m.rM; }
+    else if (m.rL.n >= PREFER_LEGENDARY) { basis = 'legendary'; a = m.rL; }
+    else if (m.r.n >= PREFER_RANKED) { basis = 'ranked'; a = m.r; }
     else { basis = m.r.n ? 'mixed' : 'trophy'; a = merged(m.r, m.t); }
     if (a.n < MIN_MAP_BATTLES) continue;
-    const cur = rankBrawlers(a);
-    if (!cur.picks.length) continue;
+    chosen.push({ m, basis, a, rows: brawlerRows(a) });
+  }
 
-    // new (shadow)
-    let sBasis, sa;
-    if (m.rM.n >= PREFER_MASTERS) { sBasis = 'masters'; sa = m.rM; }
-    else if (m.rL.n >= PREFER_LEGENDARY) { sBasis = 'legendary'; sa = m.rL; }
-    else { sBasis = basis; sa = a; }
-    const shadow = { basis: sBasis, ...rankBrawlers(sa, { pickPrior: true }) };
+  // Fit the model separately for Ranked-based maps (picks + bans) and trophy-based maps (no bans).
+  const family = (c) => (['masters', 'legendary', 'ranked'].includes(c.basis) ? 'ranked' : 'trophy');
+  const model = {};
+  for (const f of ['ranked', 'trophy']) {
+    const rowsByMap = chosen.filter((c) => family(c) === f).map((c) => c.rows);
+    model[f] = { score: fitModel(rowsByMap), win: fitModel(rowsByMap, () => 0) };
+  }
 
+  const maps = [];
+  for (const { m, basis, a, rows } of chosen) {
+    const md = model[family({ basis })];
+    const scored = scoreRows(rows, md.score, md.win);
+    if (!scored.length) continue;
     maps.push({
       id: m.id ?? `${m.mode}-${nameKey(m.name)}`,
       name: m.name,
@@ -246,14 +279,18 @@ export function buildMaps(days, rankedPool) {
       modeColor: modeColor(m.mode),
       ranked: RANKED_MODES.has(m.mode) && (rankedPool.has(nameKey(m.name)) || m.r.n >= 5),
       basis,
+      sample: a.n,
       rankedGames: m.r.n,
       legendaryGames: m.rL.n,
       mastersGames: m.rM.n,
-      ...cur,
-      shadow,
+      topSideWin: r1(100 * (a.sw / a.n)),
+      low: a.n < LOW_SAMPLE,
+      // [brawlerId, score %, win %, pick %, games, ban %], best score first
+      rows: scored.slice(0, MAX_ROWS).map((r) => [r.id, r1(100 * r.score), r1(100 * r.win), r1(100 * r.pick), r.g, r1(100 * r.ban)]),
     });
   }
-  return maps.sort((a, b) => a.name.localeCompare(b.name));
+  maps.sort((x, y) => x.name.localeCompare(y.name));
+  return { maps, model };
 }
 
 // ---------- main ----------
@@ -326,9 +363,10 @@ async function main() {
   const keep = files.slice(-WINDOW_DAYS);
   for (const f of files.slice(0, -WINDOW_DAYS)) await unlink(join(DAILY_DIR, f));
   const days = (await Promise.all(keep.map((f) => readJSON(join(DAILY_DIR, f))))).filter(Boolean);
-  const maps = buildMaps(days, rankedPool);
-  const count = (k) => maps.filter((m) => m.shadow.basis === k).length;
-  log(`maps with picks: ${maps.length}; new ranking uses Masters+ on ${count('masters')}, Legendary+ on ${count('legendary')}, all Ranked on ${count('ranked')}`);
+  const { maps, model } = buildMaps(days, rankedPool);
+  const count = (k) => maps.filter((m) => m.basis === k).length;
+  log(`maps with picks: ${maps.length}; Masters+ ${count('masters')}, Legendary+ ${count('legendary')}, all Ranked ${count('ranked')}, other ${count('mixed') + count('trophy')}`);
+  for (const [f, md] of Object.entries(model)) log(`model ${f}: score prior worth ${md.score.K} games, presence slope ${(100 * md.score.slope).toFixed(2)} pts/e-fold; win prior worth ${md.win.K} games (${md.score.n} brawler-map rows)`);
 
   if (maps.length < 5) {
     console.error(`[data] too few maps with picks (${maps.length}), keeping previous data.`);
@@ -358,7 +396,7 @@ async function main() {
     }
   }
 
-  const used = new Set(maps.flatMap((m) => [...m.picks, ...m.popular, ...m.shadow.picks, ...m.shadow.popular].map((p) => p[0])));
+  const used = new Set(maps.flatMap((m) => m.rows.map((p) => p[0])));
   const B = {};
   await pool([...used], 8, async (id) => {
     if (!brawlers[id]) return;
@@ -366,10 +404,7 @@ async function main() {
   });
   await pool(maps, 8, async (m) => { m.img = typeof m.id === 'number' ? await ensureImage('maps', m.id) : null; });
   for (const m of maps) {
-    for (const r of [m, m.shadow]) {
-      r.picks = r.picks.filter((p) => B[p[0]]);
-      r.popular = r.popular.filter((p) => B[p[0]]);
-    }
+    m.rows = m.rows.filter((p) => B[p[0]]);
   }
 
   // Brawlers seen in plenty of trophy games but never in Ranked (e.g. just released, not yet
@@ -387,6 +422,7 @@ async function main() {
     window: { days: days.length, from: keep[0]?.slice(0, 10), to: date },
     minTrophies: MIN_TROPHIES,
     battles: totals,
+    model,
     notInRanked,
     brawlers: B,
     maps,
