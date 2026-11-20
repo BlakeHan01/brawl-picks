@@ -8,7 +8,9 @@
 //     (this drops bot-filled and low-skill lobbies).
 // Players: the top BS_PLAYER_LIMIT in each region, then (crawl) up to CRAWL_LIMIT Legendary+
 // players met in those players' Ranked games.
-// Each run's counts are merged into data/daily/<date>.json; the site uses the last WINDOW_DAYS days.
+// Games are filed by the day they were played in data/daily/<date>.json; the site uses the last
+// WINDOW_DAYS days. The API only keeps a player's last 25 games, so a backfill (BACKFILL_DAYS) reads
+// many players to reach older games; older days come out thinner.
 //
 // Two rankings are written per map (shadow run):
 //   picks   current: all Ranked games (or high-trophy games), skill-adjusted, shrunk to 50%
@@ -20,6 +22,7 @@
 //   BS_PLAYER_LIMIT  top players per region (default 200)
 //   BS_REGIONS       ranking regions (default global,us,kr,br,de,jp,mx,fr)
 //   CRAWL_LIMIT      extra Legendary+ players to read per run (default 3000, 0 = off)
+//   BACKFILL_DAYS    one-off: rebuild the last n day files from every game in the logs read
 //   MIN_TROPHIES     min brawler trophies for every player in a trophy game (default 750)
 //   WINDOW_DAYS      days of daily files to combine (default 14)
 //   IMAGES           "off" to skip downloading images
@@ -37,6 +40,7 @@ const REGIONS = (process.env.BS_REGIONS || 'global,us,kr,br,de,jp,mx,fr').split(
 const CRAWL_LIMIT = Number(process.env.CRAWL_LIMIT ?? 3000);
 const MIN_TROPHIES = Number(process.env.MIN_TROPHIES || 750);
 const WINDOW_DAYS = Number(process.env.WINDOW_DAYS || 14);
+const BACKFILL_DAYS = Math.min(Number(process.env.BACKFILL_DAYS || 0), WINDOW_DAYS);
 const OUT = resolve(ROOT, process.env.OUT || 'site/data/data.json');
 const DAILY_DIR = resolve(ROOT, process.env.DAILY_DIR || 'data/daily');
 const STATE = join(DAILY_DIR, '..', 'state.json');
@@ -82,7 +86,14 @@ function addGame(a, teams, mine, mineWon) {
 }
 
 // ---------- 1. sample games ----------
+// Single-day form (tests): every game goes into `day`.
 export function tally(logs, tags, cutoff, day = emptyDay()) {
+  tallyInto(logs, tags, cutoff, () => day);
+  return day;
+}
+
+// pick(timeMs) returns the day object a game belongs to, or null to skip it.
+export function tallyInto(logs, tags, cutoff, pick) {
   const seen = new Set();
   for (let i = 0; i < logs.length; i++) {
     for (const it of listOf(logs[i])) {
@@ -90,6 +101,8 @@ export function tally(logs, tags, cutoff, day = emptyDay()) {
       const bt = it.battle || {};
       const t = parseTime(it.battleTime);
       if (cutoff && !(t > cutoff)) continue; // counted by an earlier run
+      const day = pick(t);
+      if (!day) continue;
       const mode = ev.mode && ev.mode !== 'unknown' ? ev.mode : bt.mode;
       const teams = bt.teams;
       if (!mode || !ev.map || !Array.isArray(teams) || teams.length !== 2) continue;
@@ -128,7 +141,6 @@ export function tally(logs, tags, cutoff, day = emptyDay()) {
       } else day.battles.trophy++;
     }
   }
-  return day;
 }
 
 // Players to crawl: Legendary+ players met in Ranked games, not already sampled.
@@ -259,26 +271,48 @@ async function main() {
   const logs = await pool(tags, 10, (t) => official(`/players/${encodeURIComponent(t)}/battlelog`));
   log(`top-player logs read: ${logs.filter(Boolean).length}/${tags.length}`);
 
-  if (CRAWL_LIMIT > 0) {
-    const extra = crawlTags(logs, new Set(tags), CRAWL_LIMIT);
+  // Crawl outward, hop by hop, through Legendary+ players met in Ranked games.
+  const have = new Set(tags);
+  let frontier = logs.slice();
+  let crawled = 0;
+  for (let hop = 1; crawled < CRAWL_LIMIT && frontier.length; hop++) {
+    const extra = crawlTags(frontier, have, CRAWL_LIMIT - crawled);
+    if (!extra.length) break;
+    for (const t of extra) have.add(t);
     const more = await pool(extra, 10, (t) => official(`/players/${encodeURIComponent(t)}/battlelog`));
-    log(`crawl: read ${more.filter(Boolean).length}/${extra.length} Legendary+ players met in Ranked games`);
+    log(`crawl hop ${hop}: read ${more.filter(Boolean).length}/${extra.length} Legendary+ players met in Ranked games`);
     tags.push(...extra);
     logs.push(...more);
+    crawled += extra.length;
+    frontier = more;
   }
 
-  // Merge into today's file (the stats job runs several times a day).
+  // Each game goes into the file for the day it was played (UTC).
+  // Normal run: only games newer than the last run, merged into existing day files.
+  // Backfill (BACKFILL_DAYS=n): every game from the last n days, and those day files are rebuilt.
   await mkdir(DAILY_DIR, { recursive: true });
-  const date = new Date(started).toISOString().slice(0, 10);
-  const dayFile = join(DAILY_DIR, `${date}.json`);
-  const prevDay = await readJSON(dayFile);
-  const fresh = prevDay?.v !== DAY_VERSION; // older format: rebuild today from scratch, without the cutoff
-  const day = tally(logs, tags, fresh ? 0 : state.lastRun ? Date.parse(state.lastRun) : 0, fresh ? undefined : prevDay);
-  day.date = date;
-  day.battles.players = (day.battles.players || 0) + logs.filter(Boolean).length;
-  const b = day.battles;
-  log(`today so far: ${b.ranked} Ranked (${b.legendary} Legendary+, ${b.masters} Masters+) + ${b.trophy} high-trophy games; ${b.skippedLowTrophy} low-trophy games skipped`);
-  await writeFile(dayFile, JSON.stringify(day));
+  const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const date = dayOf(started);
+  const backfill = BACKFILL_DAYS > 0;
+  const since = Date.parse(dayOf(started - (backfill ? BACKFILL_DAYS - 1 : WINDOW_DAYS - 1) * 864e5));
+  const touched = new Map();
+  // Load (or start) every day file the window can touch, then tally.
+  for (let ms = since; ms <= started; ms += 864e5) {
+    const d = dayOf(ms);
+    const prev = backfill ? null : await readJSON(join(DAILY_DIR, `${d}.json`));
+    touched.set(d, prev?.v === DAY_VERSION ? prev : { ...emptyDay(), date: d });
+  }
+  const cutoff = backfill ? 0 : state.lastRun ? Date.parse(state.lastRun) : 0;
+  tallyInto(logs, tags, cutoff, (ms) => (ms >= since ? touched.get(dayOf(ms)) : null));
+  touched.get(date).battles.players = (touched.get(date).battles.players || 0) + logs.filter(Boolean).length;
+  for (const [d, day] of touched) {
+    const file = join(DAILY_DIR, `${d}.json`);
+    const hasGames = day.battles.ranked + day.battles.trophy > 0;
+    if (hasGames || d === date) await writeFile(file, JSON.stringify(day));
+    else if (backfill) await unlink(file).catch(() => {});
+    const x = day.battles;
+    log(`${d}: ${x.ranked} Ranked (${x.legendary} Legendary+, ${x.masters} Masters+) + ${x.trophy} high-trophy games`);
+  }
   await writeFile(STATE, JSON.stringify({ lastRun: new Date(started).toISOString() }, null, 1) + '\n');
 
   // Window: newest WINDOW_DAYS files; older ones are deleted.

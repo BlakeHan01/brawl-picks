@@ -168,7 +168,7 @@ test('parseRotation turns API slots into ISO times', () => {
 });
 
 // ---------- end to end ----------
-function mockApi() {
+function mockApi({ spacingMin = 1 } = {}) {
   return createServer((req, res) => {
     const send = (j, s = 200) => res.writeHead(s, { 'content-type': 'application/json' }).end(JSON.stringify(j));
     if (req.headers.authorization !== 'Bearer KEY') return send({ reason: 'accessDenied' }, 403);
@@ -183,7 +183,7 @@ function mockApi() {
       const maps = [['Hard Rock Mine', 15000007, 'gemGrab'], ['Hot Potato', 15000100, 'heist'], ['Out in the Open', 15000101, 'knockout'], ['Backyard Bowl', 15000102, 'brawlBall'], ['Ring of Fire', 15000103, 'hotZone'], ['Below Zero', 15000853, 'brawlHockey']];
       for (let i = 0; i < 25; i++) {
         const [map, id, mode] = maps[i % maps.length];
-        items.push(battle(tag, i, { map, id, mode, type: mode === 'brawlHockey' ? 'ranked' : 'soloRanked', win: i % 3 > 0, t: now - (i + 1) * 60000 }));
+        items.push(battle(tag, i, { map, id, mode, type: mode === 'brawlHockey' ? 'ranked' : 'soloRanked', win: i % 3 > 0, t: now - (i + 1) * spacingMin * 60000 }));
       }
       return send({ items });
     }
@@ -227,6 +227,24 @@ test('end to end: stats + rotation from the mock API', async () => {
   const rj = JSON.parse(await readFile(join(dir, 'rotation.json'), 'utf8'));
   assert.equal(rj.events[0].map, 'Hard Rock Mine');
   assert.ok(Date.parse(rj.events[0].end) > Date.now());
+});
+
+test('backfill files games by the day they were played', async () => {
+  const srv = mockApi({ spacingMin: 2 * 60 }).listen(0); // one game every 2 hours, 25 per player: ~2 days
+  const dir = await mkdtemp(join(tmpdir(), 'bp-'));
+  const daily = join(dir, 'daily');
+  const env = { BS_API_BASE: `http://127.0.0.1:${srv.address().port}/v1`, BS_API_KEY: 'KEY', BS_REGIONS: 'global', CRAWL_LIMIT: '0', MIN_TROPHIES: '500', OUT: join(dir, 'data.json'), DAILY_DIR: daily, BACKFILL_DAYS: '3' };
+  const r = await run('scripts/fetch-data.mjs', env);
+  srv.close();
+  assert.equal(r.code, 0, r.stderr + r.stdout);
+  const files = (await readdir(daily)).sort();
+  assert.ok(files.length <= 3 && files.every((f) => f >= new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10)), files.join()); // last 3 days only (today counts as one)
+  let games = 0;
+  for (const f of files) games += JSON.parse(await readFile(join(daily, f), 'utf8')).battles.ranked;
+  const d = JSON.parse(await readFile(join(dir, 'data.json'), 'utf8'));
+  assert.equal(games, 6 * 21, `games: ${games}`); // all Ranked games, spread over their days
+  assert.ok(files.length >= 2, 'games are split across days');
+  assert.equal(d.window.days, files.length);
 });
 
 test('no API key: exits non-zero and writes nothing', async () => {

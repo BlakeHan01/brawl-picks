@@ -13,6 +13,14 @@ on:
         description: "Also pull brawler stats"
         type: boolean
         default: true
+      backfill_days:
+        description: "One-off backfill: rebuild this many days (0 = normal run)"
+        type: number
+        default: 0
+      crawl_limit:
+        description: "Players to crawl beyond the top players (blank = default 3000)"
+        type: string
+        default: ""
   push:
     branches: [main]
 
@@ -48,6 +56,9 @@ jobs:
         id: stats
         if: env.WANT_STATS == 'true'
         continue-on-error: true # keep serving the last good data if the pull fails
+        env:
+          BACKFILL_DAYS: ${{ inputs.backfill_days || 0 }}
+          CRAWL_LIMIT: ${{ inputs.crawl_limit || 3000 }}
         run: node scripts/fetch-data.mjs
 
       - name: Commit changes
