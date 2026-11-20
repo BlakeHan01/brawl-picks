@@ -12,20 +12,14 @@ Best Brawl Stars brawlers for every map. Type a map's initials (`hrm` → Hard R
 
 | | |
 |---|---|
-| Site UI | Done; checked on sample data (`npm run demo`) at desktop and phone width |
-| Pipeline + rotation scripts | Done; pass tests against a mock API, **not yet run against the real API** |
-| Live site | Needs the one-time setup below |
+| Site UI | Done; checked with real data at desktop and phone width |
+| Pipeline + rotation scripts | Done; running against the real API since 2026-11-20 |
+| Setup (key, secret, Pages) | Done |
+| Stats window | Fills up over the first 14 days; until then some picks rest on few games |
 
-**One-time setup (repo owner):**
-1. Create an API key at https://developer.brawlstars.com with allowed IP **45.79.218.79** (RoyaleAPI proxy, see below).
-2. Repo Settings → Secrets and variables → Actions → new secret **`BS_API_KEY`**.
-3. Repo Settings → Pages → Source: **GitHub Actions**.
-4. Merge to `main`. The push runs the workflow once, then the schedules take over.
+**One-time setup (done):** an API key from https://developer.brawlstars.com allowing IP **45.79.218.79** (RoyaleAPI proxy), stored as the repo secret **`BS_API_KEY`**; Pages source set to **GitHub Actions**. If the key is ever replaced, update the secret.
 
-**Check on the first real run** (field names come from community docs):
-- Ranked games have `battle.type` `soloRanked` / `teamRanked`; trophy games have `ranked`.
-- Battle-log players carry `brawler.trophies` (used for the high-trophy filter).
-- `/events/rotation` returns `startTime`/`endTime` as `20261120T080000.000Z`, with `event.id/mode/map`.
+Confirmed on the first real run: Ranked games have `battle.type` `soloRanked`/`teamRanked` and trophy games `ranked`; battle-log players carry `brawler.trophies`; `/events/rotation` returns `startTime`/`endTime` like `20261120T080000.000Z`. Map names come without apostrophes (`Belles Rock`), so name matching ignores punctuation.
 
 ## Data sources and why
 
@@ -37,11 +31,15 @@ Best Brawl Stars brawlers for every map. Type a map's initials (`hrm` → Hard R
 
 Per map, picks use Ranked games only once a map has 40+ of them; otherwise Ranked and high-trophy games together (specialty maps are usually trophy-only). The site states which on each map, and labels maps with under 150 games as "few games". Maps under 15 games get no picks.
 
-**Ranking:** adjusted win rate `(wins + 10) / (games + 20)`, which pulls brawlers with few games toward 50%. Brawlers under 5 games are hidden. The page shows raw win rate, pick rate and game count.
+**Ranking.** Raw win rates from top players' logs are inflated: their side wins about 57% of Ranked and 69% of trophy games in our sample, so whatever they pick looks strong. Two corrections:
+1. *Skill:* each brawler is compared with how often its side won on that map, counted on both sides. `excess = (wins on top side − games × p) + (wins on other side − games × (1 − p))`, where `p` is the top side's win rate on the map.
+2. *Luck:* the estimate is shrunk toward 50% as if every brawler had 40 extra games at 50%: `win% = 50 + 100 × excess / (games + 40)`. Brawlers under 10 games are hidden.
+
+The page shows this estimate (50% = average pick), pick rate and game count, and ranks by the estimate.
 
 **Rotation timers: official `/events/rotation`.** These are the game's own start/end times; the browser counts down from `endTime`. The file refreshes every 30 minutes, so after a slot ends its next map appears within about half an hour ("Next map soon" until then).
 
-**Images: [Brawlify CDN](https://github.com/Brawlify/CDN)**, keyed by official IDs, downloaded once into `site/img/` and served from the site. Brawlify's *API* blocks datacenter IPs (including GitHub Actions), so it isn't used.
+**Images: [Brawlify CDN](https://github.com/Brawlify/CDN)**, keyed by official IDs, downloaded once into `site/img/` and served from the site. Brawlify's *API* blocks some datacenter IPs, so it isn't used.
 
 **Requests go through the RoyaleAPI proxy** (`bsproxy.royaleapi.dev`) because GitHub runner IPs change; the key only needs to allow the proxy's IP.
 

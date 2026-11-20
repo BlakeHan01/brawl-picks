@@ -58,7 +58,7 @@ async function load() {
   for (const e of ROT.events) {
     if (e.id == null || have.has(String(e.id))) continue;
     have.add(String(e.id));
-    MAPS.push({ id: String(e.id), name: e.map, mode: e.mode, modeColor: e.modeColor, img: e.img, solo: !!e.solo, ranked: false, picks: [] });
+    MAPS.push({ id: String(e.id), name: e.map, mode: e.mode, modeId: e.modeId, modeColor: e.modeColor, img: e.img, solo: !!e.solo, ranked: false, picks: [] });
   }
   mapsById = new Map(MAPS.map((m) => [m.id, m]));
   for (const m of MAPS) m.ini = initials(m.name);
@@ -82,7 +82,7 @@ function tick() {
 
 function renderFoot() {
   const parts = [];
-  if (DATA.generatedAt) parts.push(`Stats updated ${esc(new Date(DATA.generatedAt).toLocaleDateString())} from ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked and ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games by top players over the last ${DATA.window?.days ?? '?'} days`);
+  if (DATA.generatedAt) parts.push(`Stats updated ${esc(new Date(DATA.generatedAt).toLocaleDateString())} from ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked and ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games by top players over the last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}`);
   if (ROT.fetchedAt) parts.push(`timers checked ${ago(ROT.fetchedAt)}`);
   $('#foot').innerHTML = `${parts.join(' · ')}<br>Images from <a href="https://brawlify.com" rel="noopener">Brawlify</a>. Not affiliated with, endorsed or sponsored by Supercell.`;
 }
@@ -96,14 +96,18 @@ function av(id, cls = '') {
 }
 
 // ---------- home ----------
+const RANKED_MODES = ['gemGrab', 'brawlBall', 'heist', 'bounty', 'knockout', 'hotZone'];
+const SPECIAL = 'special';
+const isSpecial = (m) => !RANKED_MODES.includes(m.modeId);
 function pool() {
-  return MAPS.filter((m) => (!rankedOnly || m.ranked) && (!modeFilter || m.mode === modeFilter));
+  return MAPS.filter((m) => (!rankedOnly || m.ranked) && (!modeFilter || (modeFilter === SPECIAL ? isSpecial(m) : m.mode === modeFilter)));
 }
 
 function renderChips() {
-  const modes = [...new Map(MAPS.map((m) => [m.mode, m.modeColor])).entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const modes = [...new Map(MAPS.filter((m) => !isSpecial(m)).map((m) => [m.mode, m.modeColor])).entries()].sort((a, b) => a[0].localeCompare(b[0]));
   $('#chips').innerHTML = `<button class="chip" data-f="ranked" aria-pressed="${rankedOnly}">Ranked only</button>` +
-    modes.map(([k, c]) => `<button class="chip" data-mode="${esc(k)}" aria-pressed="${modeFilter === k}" style="--mc:${esc(c)}"><span class="d"></span>${esc(k)}</button>`).join('');
+    modes.map(([k, c]) => `<button class="chip" data-mode="${esc(k)}" aria-pressed="${modeFilter === k}" style="--mc:${esc(c)}"><span class="d"></span>${esc(k)}</button>`).join('') +
+    (MAPS.some(isSpecial) ? `<button class="chip" data-mode="${SPECIAL}" aria-pressed="${modeFilter === SPECIAL}" style="--mc:var(--dim)"><span class="d"></span>Special events</button>` : '');
 }
 
 function renderLive() {
@@ -158,10 +162,11 @@ const pct = (x) => `${x.toFixed(1)}%`;
 const n = (x) => Number(x).toLocaleString();
 
 function basisText(m) {
-  const days = DATA.window?.days ?? 14;
-  if (m.basis === 'ranked') return `Based on <b>${n(m.sample)}</b> Ranked games by top players, last ${days} days.`;
-  if (m.basis === 'mixed') return `Based on <b>${n(m.sample)}</b> Ranked and high-trophy games by top players, last ${days} days.`;
-  return `Based on <b>${n(m.sample)}</b> trophy games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies, last ${days} days.`;
+  const d = DATA.window?.days ?? 14;
+  const days = d === 1 ? 'last day' : `last ${d} days`;
+  if (m.basis === 'ranked') return `Based on <b>${n(m.sample)}</b> Ranked games by top players, ${days}.`;
+  if (m.basis === 'mixed') return `Based on <b>${n(m.sample)}</b> Ranked and high-trophy games by top players, ${days}.`;
+  return `Based on <b>${n(m.sample)}</b> trophy games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies, ${days}.`;
 }
 
 function renderMap(m) {
