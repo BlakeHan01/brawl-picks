@@ -37,7 +37,7 @@ import {
   ROOT, BS_KEY, log, official, getJSON, pool, listOf, parseTime, titleCase, nameKey,
   modeName, modeColor, RANKED_MODES, ensureImage,
 } from './lib.mjs';
-import { blankBuilds, tallyBuilds, summarizeBuilds } from './builds.mjs';
+import { blankBuilds, tallyBuilds, summarizeBuilds, blankEffects, tallyEffects, addEffects, solveEffects } from './builds.mjs';
 
 const PLAYER_LIMIT = Number(process.env.BS_PLAYER_LIMIT || 200);
 const REGIONS = (process.env.BS_REGIONS || 'global,us,kr,br,de,jp,mx,fr').split(',').map((s) => s.trim()).filter(Boolean);
@@ -70,11 +70,24 @@ const RANKED_TYPES = new Set(['soloRanked', 'teamRanked']);
 // bans[brawlerId] = Ranked games in which it was banned (each player bans one brawler).
 // Groups: r = all Ranked, rL = Ranked with every player Legendary+, rM = Masters+, t = high-trophy.
 const GROUPS = ['r', 'rL', 'rM', 't'];
-const blank = () => ({ n: 0, sw: 0, b: {}, bans: {} });
+const blank = () => ({ n: 0, sw: 0, b: {}, bans: {} }); // + c (trios) for rL and t
 const emptyDay = () => ({ v: DAY_VERSION, battles: { ranked: 0, legendary: 0, masters: 0, trophy: 0, skippedLowTrophy: 0, players: 0 }, maps: {} });
 
-function addGame(a, teams, mine, mineWon) {
+// Trios (3-player teams) are stored as "a.b.c" brawler-id offsets from ID_BASE, sorted, with
+// [games, wins] on the sampled side then the other side. Pairs are derived from trios.
+const ID_BASE = 16000000;
+function addGame(a, teams, mine, mineWon, combos = false) {
   a.n++;
+  if (combos) {
+    teams.forEach((team, ti) => {
+      if (team.length !== 3) return;
+      const key = team.map((p) => p.brawler.id - ID_BASE).sort((x, y) => x - y).join('.');
+      const side = ti === mine ? 0 : 2;
+      const s = ((a.c ||= {})[key] ||= [0, 0, 0, 0]);
+      s[side]++;
+      if ((ti === mine) === mineWon) s[side + 1]++;
+    });
+  }
   const banned = new Set(teams.flat().map((p) => p.bannedBrawler?.id).filter(Boolean));
   for (const id of banned) a.bans[id] = (a.bans[id] || 0) + 1;
   if (mineWon) a.sw++;
@@ -137,7 +150,8 @@ export function tallyInto(logs, tags, cutoff, pick) {
       const m = (day.maps[mk] ||= { id: ev.id ?? null, name: ev.map, mode, r: blank(), rL: blank(), rM: blank(), t: blank() });
       if (ev.id && !m.id) m.id = ev.id;
       const mineWon = bt.result === 'victory';
-      for (const g of groups) addGame(m[g], teams, mine, mineWon);
+      // combos only for Legendary+ Ranked and high-trophy games (keeps the data small)
+      for (const g of groups) addGame(m[g], teams, mine, mineWon, g === 'rL' || g === 't');
       if (groups[0] === 'r') {
         day.battles.ranked++;
         if (groups.includes('rL')) day.battles.legendary++;
@@ -234,6 +248,43 @@ function add(into, from) {
     for (let k = 0; k < 4; k++) s[k] += v[k];
   }
   for (const [id, c] of Object.entries(from.bans || {})) into.bans[id] = (into.bans[id] || 0) + c;
+  for (const [k, v] of Object.entries(from.c || {})) {
+    const s = ((into.c ||= {})[k] ||= [0, 0, 0, 0]);
+    for (let i = 0; i < 4; i++) s[i] += v[i];
+  }
+}
+
+// Best duos and trios on one map, from a group with trios (g.c).
+//   win     = the combo's skill-adjusted win rate, pulled toward 50% like single brawlers (K games)
+//   synergy = how much better (points) the combo did than its brawlers' own results add up to
+const MIN_DUO = 40, MIN_TRIO = 30, TOP_COMBOS = 5;
+export function combosFor(g, K) {
+  if (!g?.c || !g.n) return null;
+  const pS = g.sw / g.n;
+  const solo = {};
+  for (const [id, [gS, wS, gO, wO]] of Object.entries(g.b)) {
+    const n = gS + gO;
+    if (n) solo[id] = (wS - gS * pS + (wO - gO * (1 - pS))) / n;
+  }
+  const pairs = {};
+  const rows = (dict, min) => Object.entries(dict).map(([key, [gS, wS, gO, wO]]) => {
+    const n = gS + gO;
+    const ids = key.split('.').map((x) => ID_BASE + Number(x));
+    const ex = wS - gS * pS + (wO - gO * (1 - pS));
+    const expected = ids.reduce((s, id) => s + (solo[id] || 0), 0);
+    // synergy is pulled toward 0 like win rates, so a few lucky games can't show a huge "together" bonus
+    return { ids, n, win: (0.5 * n + ex + K * 0.5) / (n + K), synergy: (ex - expected * n) / (n + K) };
+  }).filter((r) => r.n >= min).sort((x, y) => y.win - x.win).slice(0, TOP_COMBOS)
+    .map((r) => [r.ids, r1(100 * r.win), r.n, r1(100 * r.synergy)]);
+  for (const [key, v] of Object.entries(g.c)) {
+    const [a, b, c] = key.split('.');
+    for (const pk of [`${a}.${b}`, `${a}.${c}`, `${b}.${c}`]) {
+      const s = (pairs[pk] ||= [0, 0, 0, 0]);
+      for (let i = 0; i < 4; i++) s[i] += v[i];
+    }
+  }
+  const duos = rows(pairs, MIN_DUO), trios = rows(g.c, MIN_TRIO);
+  return duos.length || trios.length ? { duos, trios } : null;
 }
 const merged = (...xs) => { const a = blank(); for (const x of xs) add(a, x); return a; };
 
@@ -291,6 +342,8 @@ export function buildMaps(days, rankedPool) {
       low: a.n < LOW_SAMPLE,
       // [brawlerId, score %, win %, pick %, games, ban %], best score first
       rows: scored.slice(0, MAX_ROWS).map((r) => [r.id, r1(100 * r.score), r1(100 * r.win), r1(100 * r.pick), r.g, r1(100 * r.ban)]),
+      // [[brawlerIds], win %, games, synergy points], best win first
+      combos: combosFor(family({ basis }) === 'ranked' ? m.rL : m.t, md.win.K),
     });
   }
   maps.sort((x, y) => x.name.localeCompare(y.name));
@@ -345,8 +398,12 @@ async function main() {
   const seen = (await readJSON(seenFile)) || {};
   const oldest = new Date(started - (WINDOW_DAYS - 1) * 864e5).toISOString().slice(0, 10);
   for (const [t, d] of Object.entries(seen)) if (d < oldest) delete seen[t];
+  const buildFiles = async () => (await readdir(BUILD_DIR)).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort().slice(-WINDOW_DAYS);
   if (PROFILE_LIMIT > 0) {
+    // Players whose battle logs we just read come first: their profile + games feed the
+    // "what missing pieces cost" estimate. Then other Legendary+ players met in Ranked games.
     const cands = new Set();
+    tags.forEach((t, i) => { if (logs[i] && !seen[t]) cands.add(t); });
     for (const lg of logs) for (const it of listOf(lg)) {
       const bt = it.battle || {};
       if (!RANKED_TYPES.has(bt.type) || !Array.isArray(bt.teams)) continue;
@@ -355,18 +412,24 @@ async function main() {
     const pick = [...cands].slice(0, PROFILE_LIMIT);
     const profiles = await pool(pick, 10, (t) => official(`/players/${encodeURIComponent(t)}`));
     const bfile = join(BUILD_DIR, `${runDate}.json`);
+    const prior = summarizeBuilds((await Promise.all((await buildFiles()).map((f) => readJSON(join(BUILD_DIR, f))))).filter(Boolean));
     const counts = tallyBuilds(profiles, (await readJSON(bfile)) || blankBuilds(), itemNames);
+    const logsByTag = new Map(tags.map((t, i) => [t, logs[i]]));
+    counts.eff = tallyEffects(profiles, logsByTag, prior, counts.eff?.v === 2 ? counts.eff : blankEffects());
     pick.forEach((t, i) => { if (profiles[i]) seen[t] = runDate; });
     await writeFile(bfile, JSON.stringify(counts));
     await writeFile(seenFile, JSON.stringify(seen));
-    log(`builds: read ${profiles.filter(Boolean).length}/${pick.length} new Legendary+ profiles (${counts.players} today, ${Object.keys(seen).length} in window)`);
+    log(`builds: read ${profiles.filter(Boolean).length}/${pick.length} new Legendary+ profiles (${counts.players} today, ${Object.keys(seen).length} in window); build-cost games today: ${counts.eff.n}`);
   }
   const itemsFile = join(BUILD_DIR, 'items.json');
   Object.assign(itemNames, { ...((await readJSON(itemsFile)) || {}), ...itemNames });
   await writeFile(itemsFile, JSON.stringify(itemNames));
   const bfiles = (await readdir(BUILD_DIR)).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
   for (const f of bfiles.slice(0, -WINDOW_DAYS)) await unlink(join(BUILD_DIR, f));
-  const builds = summarizeBuilds((await Promise.all(bfiles.slice(-WINDOW_DAYS).map((f) => readJSON(join(BUILD_DIR, f))))).filter(Boolean));
+  const buildDays = (await Promise.all(bfiles.slice(-WINDOW_DAYS).map((f) => readJSON(join(BUILD_DIR, f))))).filter(Boolean);
+  const builds = summarizeBuilds(buildDays);
+  const costs = solveEffects(buildDays.reduce((acc, d) => addEffects(acc, d.eff), blankEffects()));
+  log(`build costs from ${costs.n} games / ${costs.players} players: ` + Object.entries(costs.pieces).map(([k, v]) => `${k} ${v.effect}±${v.se} -> ${v.penalty}`).join(', '));
 
   // Each game goes into the file for the day it was played (UTC).
   // Normal run: only games newer than the last run, merged into existing day files.
@@ -434,7 +497,7 @@ async function main() {
     }
   }
 
-  const used = new Set(maps.flatMap((m) => m.rows.map((p) => p[0])));
+  const used = new Set(maps.flatMap((m) => [...m.rows.map((p) => p[0]), ...['duos', 'trios'].flatMap((k) => (m.combos?.[k] || []).flatMap((c) => c[0]))]));
   const B = {};
   await pool([...used], 8, async (id) => {
     if (!brawlers[id]) return;
@@ -445,14 +508,15 @@ async function main() {
   const items = {};
   const want = [];
   for (const b of Object.values(B)) {
-    if (b.b?.sp) want.push(['star-powers', b.b.sp[0]]);
-    if (b.b?.gad) want.push(['gadgets', b.b.gad[0]]);
+    if (b.b?.sp) want.push(['star-powers-framed', b.b.sp[0]]);
+    if (b.b?.gad) want.push(['gadgets-framed', b.b.gad[0]]);
     for (const g of b.b?.gear?.[0] || []) want.push(['gears', g]);
   }
   await pool(want, 8, async ([kind, id]) => { items[id] = { n: itemNames[id] || '', img: await ensureImage(kind, id) }; });
   await pool(maps, 8, async (m) => { m.img = typeof m.id === 'number' ? await ensureImage('maps', m.id) : null; });
   for (const m of maps) {
     m.rows = m.rows.filter((p) => B[p[0]]);
+    if (m.combos) for (const k of ['duos', 'trios']) m.combos[k] = m.combos[k].filter((c) => c[0].every((id) => B[id]));
   }
 
   // Brawlers seen in plenty of trophy games but never in Ranked (e.g. just released, not yet
@@ -471,6 +535,7 @@ async function main() {
     minTrophies: MIN_TROPHIES,
     battles: totals,
     model,
+    costs,
     notInRanked,
     items,
     brawlers: B,
