@@ -413,7 +413,7 @@ function renderCombos(m) {
   const B = DATA.brawlers;
   const mine = (ids) => PLAYER && ids.every((id) => PLAYER.brawlers.some((b) => b.id === id && b.power === 11));
   const block = (title, list) => !list?.length ? '' : `
-    <h2>${title} <small>${list.length} best</small></h2>
+    <h2>${title} <small>Top ${list.length}</small></h2>
     <ol class="combos">${list.map(([ids, win, games, syn], i) => `
       <li>
         <span class="rk">${i + 1}</span>
