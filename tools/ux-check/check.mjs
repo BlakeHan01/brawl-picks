@@ -52,6 +52,21 @@ async function audit(p, label, { width } = {}) {
   }
 }
 const hash = (p) => p.evaluate(() => location.hash);
+// Tap a build icon and check its tooltip is visible, inside the screen, and the topmost thing there
+// (not hidden under a dialog). The tooltip ignores the pointer, so it is made hit-testable briefly.
+async function tooltipOnTop(p, iconSel) {
+  await p.locator(iconSel).first().click(); await p.waitForTimeout(150);
+  return p.evaluate(() => {
+    const t = document.querySelector('.tip');
+    if (!t || t.hidden) return 'no tooltip';
+    const r = t.getBoundingClientRect();
+    if (r.left < 0 || r.right > innerWidth || r.top < 0 || r.bottom > innerHeight) return 'off screen';
+    t.style.pointerEvents = 'auto';
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    t.style.pointerEvents = '';
+    return top === t || t.contains(top) ? 'ok' : `covered by ${top?.id || top?.className || top?.tagName}`;
+  });
+}
 const visible = (p, sel) => p.isVisible(sel);
 const settle = (p, ms = 350) => p.waitForTimeout(ms);
 
@@ -116,7 +131,16 @@ async function dialogPattern(p, label, openSel, dialogSel) {
     check('Enter opens the map', (await hash(p)).startsWith('#m-'));
     check('Map page: back link says "Home"', (await p.textContent('#mapView .back')).includes('Home'));
     await audit(p, 'Map page');
+    let tt = await tooltipOnTop(p, '#mapView .top5 .bi');
+    check('Map page: build tooltip shows on top', tt === 'ok', tt);
+    await p.mouse.click(5, 5); await settle(p, 100);
+    check('Portrait phone: top 5 cards show build icons only', await p.evaluate(() => getComputedStyle(document.querySelector('.top5 .bn-name')).display === 'none'));
     await dialogPattern(p, 'Brawler card', '.top5 .bname >> nth=0', '#bpop');
+    await p.click('.top5 .bname >> nth=0'); await settle(p, 200);
+    check('Brawler card names the gadget, star power and gears', await p.evaluate(() => [...document.querySelectorAll('#bpop .bn-name')].filter((e) => e.offsetParent && e.textContent.trim()).length >= 3));
+    tt = await tooltipOnTop(p, '#bpop .bi');
+    check('Brawler card: build tooltip shows on top of the card', tt === 'ok', tt);
+    await p.keyboard.press('Escape'); await settle(p, 150);
     await p.click('#mapView .top5 .av.pop >> nth=1'); await settle(p, 200);
     check('Tapping a brawler picture opens its card', await visible(p, '#bpop'));
     await p.keyboard.press('Escape'); await settle(p, 150);
@@ -147,6 +171,12 @@ async function dialogPattern(p, label, openSel, dialogSel) {
     check(`Map from brawler page: back link says "${name}"`, (await p.textContent('#mapView .back')).includes(name));
     await p.click('#mapView .back'); await settle(p);
     check('Back returns to the brawler page at the same spot', (await hash(p)).startsWith('#b-') && Math.abs(await p.evaluate(() => scrollY) - 400) < 60, `scrollY ${await p.evaluate(() => scrollY)}`);
+    await p.evaluate(() => window.scrollTo(0, 0)); await settle(p, 150);
+    await p.mouse.wheel(0, 600); await settle(p, 400);
+    const fabDown = await p.evaluate(() => getComputedStyle(document.querySelector('#searchFab')).opacity);
+    await p.mouse.wheel(0, -300); await settle(p, 400);
+    const fabUp = await p.evaluate(() => getComputedStyle(document.querySelector('#searchFab')).opacity);
+    check('Floating search button hides while scrolling down, returns on scroll up', fabDown === '0' && fabUp === '1', `down ${fabDown}, up ${fabUp}`);
     await p.keyboard.press('Escape'); await settle(p);
     check('Escape on a page goes back', await visible(p, '#searchView'));
     await p.goto(BASE + '#b-99999999'); await settle(p);
@@ -197,6 +227,14 @@ async function dialogPattern(p, label, openSel, dialogSel) {
       const q = await newPage(b, { viewport: { width: 320, height: 760 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, { player: true, wallet: { c: 30000, p: 12000 } }); pages.push(q);
       await q.goto(BASE + url); await settle(q, 900);
       await audit(q, `320px ${label}`, { width: 320 });
+    }
+
+    // ===== 6b. Landscape phone: top 5 cards name the gadget and star power =====
+    {
+      const q = await newPage(b, devices['iPhone 13 landscape']); pages.push(q);
+      await q.goto(BASE + `#m-${rankedMap.id}`); await settle(q, 900);
+      check('Landscape phone: top 5 cards show gadget and star power names', await q.evaluate(() => [...document.querySelectorAll('.top5 .bn-name')].some((e) => e.offsetParent && e.textContent.trim())));
+      await audit(q, 'Landscape map page', { width: 844 });
     }
 
     // ===== 7. Desktop keyboard =====

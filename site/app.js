@@ -296,7 +296,8 @@ function build(id, small = false, own = null, named = false) {
   if (!rows.some((r) => r.icons)) return '';
   if (named) {
     // gadget and star power get their names; gears are recognisable from their icons
-    return `<span class="build named">${rows.filter((r) => r.icons).map((r) => r.gear
+    // named === 'all' (brawler card): gears get their names too
+    return `<span class="build named">${rows.filter((r) => r.icons).map((r) => r.gear && named !== 'all'
       ? `<span class="bn-row gears">${r.icons}</span>`
       : `<span class="bn-row${r.missing ? ' miss-row' : ''}">${r.icons}<span class="bn-name">${esc(r.name || '')}</span></span>`).join('')}</span>`;
   }
@@ -527,7 +528,7 @@ function openPop(id, e) {
       <button class="bpop-x" type="button" aria-label="Close">✕</button>
     </div>
     ${statTiles(st)}
-    ${b.b ? `<div class="bp-build">${build(id, false, own || null)}</div>` : ''}
+    ${b.b ? `<div class="bp-build">${build(id, false, own || null, 'all')}</div>` : ''}
     ${yoursLine(id)}
     ${top.length ? `<h3 class="bpop-h">Best Ranked maps</h3><ol class="bp-maps sm">${top.map((x) => `<li><a href="#m-${esc(x.m.id)}" data-frompop>
         <span class="dot" style="--mc:${esc(x.m.modeColor || '#888')}"></span>
@@ -1047,6 +1048,15 @@ if ('IntersectionObserver' in window) {
   new IntersectionObserver(([en]) => fab.classList.toggle('away', en.isIntersecting && !searchView.hidden)).observe(q);
 }
 fab.title = `Search maps and brawlers (/ or ${shortcut})`;
+// Out of the way while reading: hide the floating button when scrolling down, show it again on the
+// way back up (it would otherwise sit on top of ranks and prices near the bottom-right).
+let fabY = scrollY;
+window.addEventListener('scroll', () => {
+  const y = scrollY;
+  if (y > fabY + 8 && y > 120) fab.classList.add('hide');
+  else if (y < fabY - 8 || y <= 120) fab.classList.remove('hide');
+  if (Math.abs(y - fabY) > 8) fabY = y;
+}, { passive: true });
 fab.addEventListener('click', goSearch);
 $('#kbdHint').textContent = isMac ? '⌘K' : '/';
 
