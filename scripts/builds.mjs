@@ -15,7 +15,7 @@ const MIN_POWER = { sp: 9, gad: 7, gear: 8 };
 // Smallest number of choices before we show a recommendation.
 export const MIN_SAMPLES = { sp: 20, gad: 20, gear: 20 };
 
-export const blankBuilds = () => ({ v: 1, players: 0, sp: {}, gad: {}, gear: {} });
+export const blankBuilds = () => ({ v: 1, players: 0, sp: {}, gad: {}, gear: {}, buf: {} });
 
 // profiles: official /players/{tag} responses. names: id -> display name (filled in).
 export function tallyBuilds(profiles, counts = blankBuilds(), names = {}) {
@@ -29,10 +29,20 @@ export function tallyBuilds(profiles, counts = blankBuilds(), names = {}) {
       }
       if (b.power >= MIN_POWER.sp && b.starPowers?.length === 1) inc(counts.sp, b.id, b.starPowers[0].id);
       if (b.power >= MIN_POWER.gad && b.gadgets?.length === 1) inc(counts.gad, b.id, b.gadgets[0].id);
+      // The API lists buffies (all false) for every brawler, even ones that have none in the game.
+      // Counting who owns any tells us which brawlers really have buffies.
+      if (b.buffies && Object.values(b.buffies).some(Boolean)) { counts.buf ||= {}; counts.buf[b.id] = (counts.buf[b.id] || 0) + 1; }
       if (b.power >= MIN_POWER.gear && b.gears?.length === 2) inc(counts.gear, b.id, b.gears.map((g) => g.id).sort((x, y) => x - y).join('+'));
     }
   }
   return counts;
+}
+
+// Brawlers that have buffies in the game: owned by at least `min` skilled players in the window.
+export function buffyBrawlers(list, min = 3) {
+  const sum = {};
+  for (const c of list) for (const [b, n] of Object.entries(c?.buf || {})) sum[b] = (sum[b] || 0) + n;
+  return Object.keys(sum).filter((b) => sum[b] >= min).map(Number).sort((a, b) => a - b);
 }
 
 // Wilson 95% lower bound of a share.
@@ -77,14 +87,15 @@ export function summarizeBuilds(list) {
 // win-rate points each missing piece costs. Only the sums are stored, so days add up.
 export const EFFECTS = ['powerLevel', 'noHypercharge', 'buffieMissing', 'noStarPower', 'otherStarPower', 'noGadget', 'otherGadget', 'gearMissing'];
 const K = EFFECTS.length;
-export const blankEffects = () => ({ v: 2, n: 0, players: 0, nz: Array(K).fill(0), xtx: Array(K * K).fill(0), xty: Array(K).fill(0) });
+export const blankEffects = () => ({ v: 3, n: 0, players: 0, nz: Array(K).fill(0), xtx: Array(K * K).fill(0), xty: Array(K).fill(0) });
 
 // own: profile brawler; build: { sp, gad } summary (top choice + clear flag); power: from the battle.
-export function featuresFor(own, build = {}, power = own.power) {
+// hasBuffies: whether this brawler has buffies in the game at all.
+export function featuresFor(own, build = {}, power = own.power, hasBuffies = true) {
   const sp = own.starPowers?.map((x) => x.id ?? x) || [];
   const gad = own.gadgets?.map((x) => x.id ?? x) || [];
   const gears = own.gears?.length || 0;
-  const buffies = own.buffies ? 3 - ['gadget', 'starPower', 'hyperCharge'].filter((k) => own.buffies[k]).length : 0;
+  const buffies = hasBuffies && own.buffies ? 3 - ['gadget', 'starPower', 'hyperCharge'].filter((k) => own.buffies[k]).length : 0;
   return [
     Math.max(0, Math.min(2, 11 - power)),
     own.hyperCharges?.length ? 0 : 1,
@@ -101,7 +112,8 @@ export function featuresFor(own, build = {}, power = own.power) {
 // brawler (fewer trophies) faces easier opponents and looks *better*: measured on trophy games,
 // "below power 11" came out +8.5 points. Ranked matches by the player's rank instead.
 const GAME_TYPES = new Set(['soloRanked', 'teamRanked']);
-export function tallyEffects(profiles, logsByTag, builds = {}, acc = blankEffects()) {
+// buffy: Set of brawler ids that have buffies (others never count as missing them).
+export function tallyEffects(profiles, logsByTag, builds = {}, acc = blankEffects(), buffy = new Set()) {
   for (const pr of profiles) {
     const log = pr?.tag && logsByTag.get(pr.tag);
     if (!log) continue;
@@ -115,7 +127,7 @@ export function tallyEffects(profiles, logsByTag, builds = {}, acc = blankEffect
       const own = me && owned.get(me.brawler?.id);
       const power = me?.brawler?.power;
       if (!own || !(power >= 9)) continue;
-      rows.push({ x: featuresFor(own, builds[own.id], power), y: bt.result === 'victory' ? 1 : 0 });
+      rows.push({ x: featuresFor(own, builds[own.id], power, buffy.has(own.id)), y: bt.result === 'victory' ? 1 : 0 });
     }
     if (rows.length < 2) continue;
     const mx = Array(K).fill(0);
@@ -136,7 +148,7 @@ export function tallyEffects(profiles, logsByTag, builds = {}, acc = blankEffect
 }
 
 export function addEffects(into, from) {
-  if (!from || from.v !== 2) return into; // older sums included trophy games (biased); skip them
+  if (!from || from.v !== 3) return into; // older sums were biased (v1: trophy games; v2: buffies counted for every brawler)
   into.n += from.n; into.players += from.players;
   for (let i = 0; i < K; i++) { into.nz[i] += from.nz[i]; into.xty[i] += from.xty[i]; }
   for (let i = 0; i < K * K; i++) into.xtx[i] += from.xtx[i];

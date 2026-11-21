@@ -40,3 +40,25 @@ test('tag normalization', () => {
   assert.equal(normalizeTag('#2ppoy8lq'), '2PP0Y8LQ');
   assert.equal(normalizeTag('abc'), null);
 });
+
+import { withRealBuffies } from '../site/curate.js';
+import { tallyBuilds, buffyBrawlers, featuresFor } from '../scripts/builds.mjs';
+
+test('buffies only count for brawlers that have them in the game', () => {
+  const piper = full(15, { buffies: { gadget: false, starPower: false, hyperCharge: false } });
+  const colt = full(1, { buffies: { gadget: true, starPower: false, hyperCharge: false } });
+  const p = withRealBuffies({ brawlers: [piper, colt] }, [1]);
+  assert.deepEqual(readiness(p.brawlers[0]).missing, []); // Piper: no buffies exist, nothing missing
+  assert.deepEqual(readiness(p.brawlers[1]).missing, ['Buffies 1/3']);
+  assert.equal(withRealBuffies({ brawlers: [colt] }, undefined).brawlers[0].buffies, undefined); // no list yet: ignore buffies
+});
+
+test('which brawlers have buffies: owned by at least 3 skilled players', () => {
+  const pr = (own) => ({ brawlers: [{ id: 1, power: 11, buffies: { gadget: own, starPower: false, hyperCharge: false } }, { id: 15, power: 11, buffies: { gadget: false, starPower: false, hyperCharge: false } }] });
+  const day = tallyBuilds([pr(true), pr(true), pr(false)]);
+  assert.deepEqual(buffyBrawlers([day]), []); // 2 owners: not enough yet
+  assert.deepEqual(buffyBrawlers([day, tallyBuilds([pr(true)])]), [1]);
+  const piper = { power: 11, starPowers: [1], gadgets: [2], gears: [3, 4], hyperCharges: [5], buffies: { gadget: false, starPower: false, hyperCharge: false } };
+  assert.equal(featuresFor(piper, {}, 11, false)[2], 0); // build-cost model: no "missing buffies" for Piper
+  assert.equal(featuresFor(piper, {}, 11, true)[2], 3);
+});

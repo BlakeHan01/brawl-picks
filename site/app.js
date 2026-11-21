@@ -1,7 +1,7 @@
 import { searchMaps, searchBrawlers, initials } from './search.js';
 import { API_BASE } from './config.js';
 import { modeName, modeColor, isSoloMode } from './modes.js';
-import { curate, costsFrom, normalizeTag, readiness } from './curate.js';
+import { curate, costsFrom, normalizeTag, readiness, withRealBuffies } from './curate.js';
 import { upgradeChains, makePlan, saveUpFor } from './advisor.js';
 
 const $ = (s) => document.querySelector(s);
@@ -35,6 +35,9 @@ const ORDERS = {
 };
 // The player's own brawlers (from the Worker), saved on this device.
 let PLAYER = null;
+// PLAYER with buffies only on brawlers that have them in the game (see withRealBuffies)
+let meCache = null;
+const me = () => { if (meCache?.p !== PLAYER || meCache?.d !== DATA) meCache = { p: PLAYER, d: DATA, v: withRealBuffies(PLAYER, DATA.buffies) }; return meCache.v; };
 try { PLAYER = JSON.parse(store.get('player') || 'null'); } catch {}
 let order = ORDERS[store.get('order')] ? store.get('order') : PLAYER ? 'curated' : 'score';
 // Map page view: single brawlers or best duos/trios.
@@ -337,7 +340,7 @@ function renderMap(m) {
   let items;
   if (ord === 'curated') {
     const builds = Object.fromEntries(Object.entries(B).map(([id, b]) => [id, b.b]));
-    items = PLAYER ? curate(rows, PLAYER, builds, costsFrom(DATA.costs)).slice(0, 10).map((c) => ({ r: c.row, c })) : [];
+    items = PLAYER ? curate(rows, me(), builds, costsFrom(DATA.costs)).slice(0, 10).map((c) => ({ r: c.row, c })) : [];
   } else {
     items = [...rows].sort((x, y) => y[o.col] - x[o.col] || y[1] - x[1]).slice(0, 20).map((r) => ({ r }));
   }
@@ -458,7 +461,7 @@ function brawlerStats(id) {
 let bShowAll = false;
 function renderBrawler(id) {
   const b = DATA.brawlers[id], st = brawlerStats(id);
-  const own = PLAYER?.brawlers.find((x) => Number(x.id) === Number(id));
+  const own = me()?.brawlers.find((x) => Number(x.id) === Number(id));
   const tile = (v, label, f = pct) => `<div class="bp-tile"><b class="num">${v == null ? '–' : f(v)}</b><span>${label}</span></div>`;
   const list = bShowAll ? st.maps : st.maps.slice(0, 8);
   let you = '';
@@ -538,12 +541,12 @@ const parseAmount = (s) => Math.min(9999999, Math.max(0, parseInt(String(s).repl
 let WALLET = (() => { try { const w = JSON.parse(store.get('wallet') || 'null'); return w && Number.isFinite(w.c) ? w : null; } catch { return null; } })();
 let upCache = null; // chains for the current player + data
 function upChains() {
-  const key = `${PLAYER?.tag}|${PLAYER?.fetchedAt}|${DATA.generatedAt}`;
+  const key = `${PLAYER?.tag}|${PLAYER?.fetchedAt}|${DATA.generatedAt}|${(DATA.buffies || []).length}`;
   if (upCache?.key !== key) {
     const maps = MAPS.filter((m) => m.ranked && rowsOf(m).length);
     const builds = Object.fromEntries(Object.entries(DATA.brawlers).map(([id, b]) => [id, b.b || {}]));
     const names = Object.fromEntries(Object.entries(DATA.items || {}).map(([id, it]) => [id, it.n]));
-    upCache = { key, maps, ...upgradeChains(PLAYER, maps, builds, costsFrom(DATA.costs), names) };
+    upCache = { key, maps, ...upgradeChains(me(), maps, builds, costsFrom(DATA.costs), names) };
   }
   return upCache;
 }
@@ -589,7 +592,7 @@ function upCard(p, rank, maxGain, U) {
     <div class="up-main">
       <div class="up-head">
         <h3 class="up-name">${esc(b.n)} <span class="up-now">${cls(p.id)} power ${own?.power ?? '?'} now</span></h3>
-        <p class="up-cost"><span class="coin">${n(p.coins)}<span class="sr"> coins</span></span>${p.pp ? `<span class="pp">${n(p.pp)}<span class="sr"> power points</span></span>` : ''}</p>
+        <p class="up-cost">${p.pp ? `<span class="pp">${n(p.pp)}<span class="sr"> power points</span></span>` : ''}<span class="coin">${n(p.coins)}<span class="sr"> coins</span></span></p>
       </div>
       ${upSteps(chain, p.from, p.to)}
       <p class="up-why">${upWhy(p.id, chain, p.from, p.to, U.maps)}</p>
@@ -610,10 +613,10 @@ function renderUpgrades() {
   body.innerHTML = `
     <form class="up-wallet" id="upWallet" novalidate>
       <div class="up-fields">
-        <div class="up-field"><label for="upCoins"><span class="coin"></span>Coins</label><input id="upCoins" inputmode="numeric" autocomplete="off" placeholder="0" aria-describedby="upHint"></div>
         <div class="up-field"><label for="upPP"><span class="pp"></span>Power points</label><input id="upPP" inputmode="numeric" autocomplete="off" placeholder="0" aria-describedby="upHint"></div>
+        <div class="up-field"><label for="upCoins"><span class="coin"></span>Coins</label><input id="upCoins" inputmode="numeric" autocomplete="off" placeholder="0" aria-describedby="upHint"></div>
       </div>
-      <p class="up-hint" id="upHint">Your coins and power points are shown at the top of the game's home screen. The game doesn't share them, so type them in.</p>
+      <p class="up-hint" id="upHint">Your power points and coins are shown at the top of the game's home screen. The game doesn't share them, so type them in.</p>
       <div class="up-presets" role="group" aria-label="Example amounts">${PRESETS.map(([l, c, p]) => `<button type="button" class="chip" data-c="${c}" data-p="${p}">${l}</button>`).join('')}</div>
     </form>
     <section class="up-summary" id="upSummary" aria-live="polite" aria-atomic="true"></section>
@@ -621,7 +624,7 @@ function renderUpgrades() {
     <details class="legend"><summary>How are these picked?</summary>
       <p>For each current Ranked map, your Curated pick takes your brawlers at power 9 or higher and subtracts points for what's missing from their build. An upgrade is worth how much it raises your <b>top 3 picks</b>, averaged over all ${U.maps.length} Ranked maps, so a brawler that's strong on many maps and nearly finished comes first. Upgrades are grouped per brawler, because power 10 → 11 only pays off after the earlier steps.</p>
       <p>The plan takes the best value per coin that fits what you have, then the next, until nothing fits. A power point counts as half a coin when comparing value. ${(DATA.costs?.n ?? 0) >= 20000 ? 'The points each missing piece costs are measured from Ranked games.' : 'The points each missing piece costs are estimates until enough Ranked games are measured.'}</p>
-      <p>Prices: power 1 → 11 costs 7,765 coins and 3,740 power points in total; gadget 1,000 coins; star power 2,000; gear 1,000; hypercharge 5,000; buffie 1,000 coins and 2,000 power points.</p>
+      <p>Prices: power 1 → 11 costs 3,740 power points and 7,765 coins in total; gadget 1,000 coins; star power 2,000; gear 1,000; hypercharge 5,000; buffie 2,000 power points and 1,000 coins (only some brawlers have buffies).</p>
     </details>`;
   const ci = $('#upCoins'), pi = $('#upPP');
   if (WALLET) { ci.value = n(WALLET.c); pi.value = n(WALLET.p); }
@@ -652,7 +655,7 @@ function upPlan(U) {
     // no amounts yet: show the best-value upgrades on the account
     const best = makePlan(U.chains, Infinity, Infinity, 5);
     const maxG = Math.max(0.01, ...best.list.map((x) => x.gain));
-    sum.innerHTML = `<p>Enter your coins and power points above, or tap an example amount, for a plan that fits what you have.</p>`;
+    sum.innerHTML = `<p>Enter your power points and coins above, or tap an example amount, for a plan that fits what you have.</p>`;
     out.innerHTML = `<h2>Best value on your account <small>top 5</small></h2><ol class="up-list">${best.list.map((p, i) => upCard(p, i + 1, maxG, U)).join('')}</ol>`;
     return;
   }
@@ -667,7 +670,7 @@ function upPlan(U) {
     ? `<p class="up-big">${plan.list.length} upgrade${plan.list.length > 1 ? 's' : ''} <span class="up-up">+${gain.toFixed(2)} pts</span></p>
        <p>Your average top-3 pick on Ranked maps goes from <b class="num">${U.strength.toFixed(1)}</b> to <b class="num">${(U.strength + gain).toFixed(1)}</b>.</p>
        <div class="up-meter" aria-hidden="true"><i style="width:${WALLET.c ? ((100 * spentC) / WALLET.c).toFixed(0) : 0}%"></i></div>
-       <p class="up-spent">Uses ${n(spentC)} of ${n(WALLET.c)} coins and ${n(spentP)} of ${n(WALLET.p)} power points.</p>`
+       <p class="up-spent">Uses ${n(spentP)} of ${n(WALLET.p)} power points and ${n(spentC)} of ${n(WALLET.c)} coins.</p>`
     : `<p class="up-big">Nothing fits yet</p><p>The cheapest useful upgrade costs more than you have. Here's what's worth saving up for.</p>`;
   out.innerHTML = `${plan.list.length ? `<h2>Your plan <small>best value first</small></h2><ol class="up-list">${plan.list.map((p, i) => upCard(p, i + 1, maxG, U)).join('')}</ol>` : ''}
     ${later.length ? `<h2>Worth saving up for</h2><ul class="up-list later">${later.map((p) => upCard(p, 0, maxG, U)).join('')}</ul>` : ''}`;

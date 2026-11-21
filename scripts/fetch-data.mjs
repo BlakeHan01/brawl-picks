@@ -37,7 +37,7 @@ import {
   ROOT, BS_KEY, log, official, getJSON, pool, listOf, parseTime, titleCase, nameKey,
   modeName, modeColor, RANKED_MODES, ensureImage,
 } from './lib.mjs';
-import { blankBuilds, tallyBuilds, summarizeBuilds, blankEffects, tallyEffects, addEffects, solveEffects } from './builds.mjs';
+import { blankBuilds, tallyBuilds, summarizeBuilds, buffyBrawlers, blankEffects, tallyEffects, addEffects, solveEffects } from './builds.mjs';
 
 const PLAYER_LIMIT = Number(process.env.BS_PLAYER_LIMIT || 200);
 const REGIONS = (process.env.BS_REGIONS || 'global,us,kr,br,de,jp,mx,fr').split(',').map((s) => s.trim()).filter(Boolean);
@@ -412,10 +412,17 @@ async function main() {
     const pick = [...cands].slice(0, PROFILE_LIMIT);
     const profiles = await pool(pick, 10, (t) => official(`/players/${encodeURIComponent(t)}`));
     const bfile = join(BUILD_DIR, `${runDate}.json`);
-    const prior = summarizeBuilds((await Promise.all((await buildFiles()).map((f) => readJSON(join(BUILD_DIR, f))))).filter(Boolean));
+    const files = await buildFiles();
+    const days = await Promise.all(files.map((f) => readJSON(join(BUILD_DIR, f))));
+    const priorDays = days.filter(Boolean);
+    const prior = summarizeBuilds(priorDays);
     const counts = tallyBuilds(profiles, (await readJSON(bfile)) || blankBuilds(), itemNames);
     const logsByTag = new Map(tags.map((t, i) => [t, logs[i]]));
-    counts.eff = tallyEffects(profiles, logsByTag, prior, counts.eff?.v === 2 ? counts.eff : blankEffects());
+    // earlier days + today (today's file is in priorDays too, so leave that copy out)
+    const otherDays = days.filter((d, i) => d && files[i] !== `${runDate}.json`);
+    const buffy = new Set(buffyBrawlers([...otherDays, counts]));
+    // v3: only brawlers that really have buffies can miss them (v2 counted every brawler)
+    counts.eff = tallyEffects(profiles, logsByTag, prior, counts.eff?.v === 3 ? counts.eff : blankEffects(), buffy);
     pick.forEach((t, i) => { if (profiles[i]) seen[t] = runDate; });
     await writeFile(bfile, JSON.stringify(counts));
     await writeFile(seenFile, JSON.stringify(seen));
@@ -428,6 +435,8 @@ async function main() {
   for (const f of bfiles.slice(0, -WINDOW_DAYS)) await unlink(join(BUILD_DIR, f));
   const buildDays = (await Promise.all(bfiles.slice(-WINDOW_DAYS).map((f) => readJSON(join(BUILD_DIR, f))))).filter(Boolean);
   const builds = summarizeBuilds(buildDays);
+  const buffies = buffyBrawlers(buildDays);
+  log(`buffies: ${buffies.length} brawlers have them`);
   const costs = solveEffects(buildDays.reduce((acc, d) => addEffects(acc, d.eff), blankEffects()));
   log(`build costs from ${costs.n} games / ${costs.players} players: ` + Object.entries(costs.pieces).map(([k, v]) => `${k} ${v.effect}±${v.se} -> ${v.penalty}`).join(', '));
 
@@ -537,6 +546,7 @@ async function main() {
     model,
     costs,
     notInRanked,
+    buffies, // brawler ids that have buffies in the game
     items,
     brawlers: B,
     maps,
