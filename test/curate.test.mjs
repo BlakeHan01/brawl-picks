@@ -11,7 +11,7 @@ test('a fully built brawler has nothing missing', () => {
 test('missing pieces are listed and cost points', () => {
   const r = readiness({ id: 1, power: 10, starPowers: [9], gadgets: [], gears: [3], hyperCharges: [], buffies: { gadget: true, starPower: false, hyperCharge: false } }, { sp: [1, 70, 100, 1] });
   assert.deepEqual(r.missing, ['Power 10', 'Not the top star power', 'No gadget', '1 gear missing', 'No hypercharge', 'Buffies 1/3']);
-  assert.equal(r.penalty, Math.round((2.5 + 1 + 1.5 + 0.75 + 1.5 + 0.8) * 10) / 10);
+  assert.equal(r.penalty, Math.round((2.5 + 1 + 1.5 + 0.75 + 1.5 + 3) * 10) / 10);
 });
 
 test('a close-call star power is not held against the player', () => {
@@ -61,4 +61,11 @@ test('which brawlers have buffies: owned by at least 3 skilled players', () => {
   const piper = { power: 11, starPowers: [1], gadgets: [2], gears: [3, 4], hyperCharges: [5], buffies: { gadget: false, starPower: false, hyperCharge: false } };
   assert.equal(featuresFor(piper, {}, 11, false)[2], 0); // build-cost model: no "missing buffies" for Piper
   assert.equal(featuresFor(piper, {}, 11, true)[2], 3);
+});
+
+test('owning two gears that are not the top pair counts as missing (when the pair is clear)', () => {
+  const g = { gear: [[7, 8], 60, 100, 1] };
+  assert.deepEqual(readiness(full(1, { gears: [3, 4] }), g).missing, ['Not the top gears']);
+  assert.deepEqual(readiness(full(1, { gears: [3, 7, 8] }), g).missing, []);
+  assert.deepEqual(readiness(full(1, { gears: [3, 4] }), { gear: [[7, 8], 30, 100, 0] }).missing, []); // not clear
 });

@@ -17,8 +17,10 @@ export const PENALTY = {
   noGadget: 1.5,
   otherGadget: 0.5,
   gearMissing: 0.75, // per missing gear slot (2 slots)
+  otherGear: 0.5, // owns 2+ gears, but not the pair skilled players run (when that's clear)
   noHypercharge: 1.5,
-  buffieMissing: 0.4, // per missing buffie (3)
+  buffieMissing: 1.5, // per missing buffie (3). Buffies replaced power 12 and boost gadget, star power and
+  // hypercharge; early Ranked data put a missing one at about -3.8 points (noisy), so 1.5 is a cautious middle
 };
 export const MIN_POWER = 9;
 
@@ -35,6 +37,7 @@ export function readiness(own, build = {}, P = PENALTY) {
   if (!gad.length) miss('No gadget', P.noGadget);
   else if (build.gad?.[3] && !gad.includes(build.gad[0])) miss('Not the top gadget', P.otherGadget);
   if (gears.length < 2) miss(gears.length ? '1 gear missing' : '2 gears missing', P.gearMissing * (2 - gears.length));
+  else if (build.gear?.[3] && !build.gear[0].every((g) => gears.includes(g))) miss('Not the top gears', P.otherGear ?? PENALTY.otherGear);
   if (!(own.hyperCharges || []).length) miss('No hypercharge', P.noHypercharge);
   if (own.buffies) {
     const have = ['gadget', 'starPower', 'hyperCharge'].filter((k) => own.buffies[k]).length;

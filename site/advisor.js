@@ -46,6 +46,8 @@ export function upgradeSteps(own, build = {}, names = {}) {
     const g = wanted.find((x) => !cur.gears.includes(x));
     add('gear', nm(g, 'Gear'), PRICE.gear, 0, g, (x) => x.gears.push(g ?? -1 - x.gears.length));
   }
+  // owns two gears but not the pair skilled players run (when that's clear): buy the missing one(s)
+  if (build.gear?.[3]) for (const g of wanted.filter((x) => !cur.gears.includes(x))) add('gear', nm(g, 'Gear'), PRICE.gear, 0, g, (x) => x.gears.push(g));
   if (!cur.hyperCharges.length) add('hypercharge', 'Hypercharge', PRICE.hypercharge, 0, null, (x) => x.hyperCharges.push(-1));
   if (own.buffies) {
     const keys = ['gadget', 'starPower', 'hyperCharge'].filter((k) => !cur.buffies[k]);
