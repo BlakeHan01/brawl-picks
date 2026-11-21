@@ -1,0 +1,9 @@
+# brawl-picks-api — Cloudflare Workers, Free plan only.
+# No KV, D1, Durable Objects, or paid add-ons.
+name = "brawl-picks-api"
+main = "src/index.js"
+compatibility_date = "2026-11-20"
+workers_dev = true
+
+[triggers]
+crons = ["17 */3 * * *"]
