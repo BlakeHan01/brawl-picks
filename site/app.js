@@ -426,7 +426,7 @@ function renderMap(m) {
         </select>
       </label>
     </div>
-    ${ord === 'curated' && PLAYER ? `<p class="for">For <b>${esc(PLAYER.name)}</b> · <a href="#" id="changeAcct">change</a> · <a href="#upgrades">What to upgrade</a></p>` : ''}
+    ${ord === 'curated' && PLAYER ? `<p class="for">For <b>${esc(PLAYER.name)}</b> · <a href="#" id="changeAcct">change</a></p>` : ''}
     ${body}`;
   const setOrder = (k) => { order = k; store.set('order', order); renderMap(m); };
   mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => setOrder(b.dataset.order)));
