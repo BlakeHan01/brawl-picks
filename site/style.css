@@ -462,8 +462,9 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
 .qclear[hidden], .sb kbd[hidden] { display: none; }
 
 /* ---- tappable brawler names ---- */
-.bname { all: unset; cursor: pointer; color: inherit; font: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-decoration-thickness: 1.5px; text-underline-offset: 3px; border-radius: 4px; min-height: 24px; display: inline-flex; align-items: center; }
-.bname:hover { text-decoration-color: var(--accent); }
+/* standalone names in cards: no underline at rest (too busy in a grid of names); underline on hover / focus */
+.bname { all: unset; cursor: pointer; color: inherit; font: inherit; text-decoration: none; text-decoration-thickness: 1.5px; text-underline-offset: 3px; border-radius: 4px; min-height: 24px; display: inline-flex; align-items: center; }
+.bname:hover, .bname:focus-visible { text-decoration: underline; text-decoration-color: var(--accent); }
 .bname:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .top5 .bname { justify-content: center; }
 
