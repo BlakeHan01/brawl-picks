@@ -219,25 +219,47 @@ const cls = (id) => {
 };
 // Best build: icons with a tooltip (hover, or tap on a phone). From what Legendary+ players chose:
 // the star power / gadget they bought first when they owned only one, and the two gears they own.
-function build(id, small = false) {
+// own (optional): the linked player's copy of this brawler. Then each icon also shows whether they
+// have it: full colour = have it, grey with a red dot = don't have it yet.
+function build(id, small = false, own = null) {
   const b = DATA.brawlers[id]?.b;
   if (!b) return '';
   const I = DATA.items || {};
- const icon = (itemId, tip, close) => {
+  const ids = (xs) => (xs || []).map((x) => x?.id ?? x);
+  const why = (x, what) => x[3]
+    ? `${Math.round(x[1])}% of ${x[2]} Legendary+ players ${what}`
+    : `close call: ${Math.round(x[1])}% vs ${Math.round(x[4])}% of ${x[2]} Legendary+ players`;
+  const icon = (itemId, { kind = '', close = false, tip, has = null }) => {
     const it = I[itemId];
     if (!it?.img) return '';
-    const t = `${tip}: ${it.n}`;
-    return `<span class="bi${kind ? ` ${kind}` : ''}${close ? ' close' : ''}" tabindex="0" role="img" aria-label="${esc(t)}" data-tip="${esc(t)}"><img src="${esc(it.img)}" alt="" loading="lazy"></span>`;
+    const state = has === null ? '' : has ? ' have' : ' missing';
+    return `<span class="bi${kind ? ` ${kind}` : ''}${close ? ' close' : ''}${state}" tabindex="0" role="img" aria-label="${esc(tip)}" data-tip="${esc(tip)}"><img src="${esc(it.img)}" alt="" loading="lazy"></span>`;
   };
-  const why = (x, what) => x[3]
-    ? ` · ${Math.round(x[1])}% of ${x[2]} Legendary+ players ${what}`
-    : ` · close call: ${Math.round(x[1])}% vs ${Math.round(x[4])}% of ${x[2]} Legendary+ players`;
+  const ownedNote = (has, otherIds, label) => {
+    if (has === null) return '';
+    if (has) return ' · You have it';
+    if (!otherIds.length) return ` · You don't have a ${label} yet`;
+    const other = otherIds.map((x) => I[x]?.n).filter(Boolean);
+    return other.length ? ` · You have ${other.join(', ')} instead` : ` · You have the other ${label} instead`;
+  };
   const parts = [];
-  if (b.sp) parts.push(icon(b.sp[0], 'Star power', !b.sp[3], 'sp').replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.sp, 'chose it first'))}"`));
-  if (b.gad) parts.push(icon(b.gad[0], 'Gadget', !b.gad[3], 'gad').replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.gad, 'chose it first'))}"`));
+  if (b.sp) {
+    const mine = own ? ids(own.starPowers) : null;
+    const has = own ? mine.includes(b.sp[0]) : null;
+    parts.push(icon(b.sp[0], { kind: 'sp', close: !b.sp[3], has, tip: `Star power: ${I[b.sp[0]]?.n} · ${why(b.sp, 'chose it first')}${ownedNote(has, mine || [], 'star power')}` }));
+  }
+  if (b.gad) {
+    const mine = own ? ids(own.gadgets) : null;
+    const has = own ? mine.includes(b.gad[0]) : null;
+    parts.push(icon(b.gad[0], { kind: 'gad', close: !b.gad[3], has, tip: `Gadget: ${I[b.gad[0]]?.n} · ${why(b.gad, 'chose it first')}${ownedNote(has, mine || [], 'gadget')}` }));
+  }
   if (b.gear) {
     const names = b.gear[0].map((g) => I[g]?.n).filter(Boolean).join(' + ');
-    for (const g of b.gear[0]) parts.push(icon(g, 'Gear', !b.gear[3]).replace(/data-tip="([^"]*)"/, () => `data-tip="${esc(`Gears: ${names}${why(b.gear, 'run this pair')}`)}"`));
+    const mine = own ? ids(own.gears) : null;
+    for (const g of b.gear[0]) {
+      const has = own ? mine.includes(g) : null;
+      parts.push(icon(g, { close: !b.gear[3], has, tip: `Gears: ${names} · ${why(b.gear, 'run this pair')}${has === null ? '' : has ? ` · You have ${I[g]?.n}` : ` · You don't have ${I[g]?.n} yet`}` }));
+    }
   }
   const html = parts.filter(Boolean).join('');
   return html ? `<span class="build${small ? ' sm' : ''}">${html}</span>` : '';
@@ -310,8 +332,10 @@ function renderMap(m) {
     ord !== 'picked' ? `${pct(r[3])} picked` : null,
     hasBans && ord !== 'banned' ? `${pct(r[5])} banned` : null,
   ].filter(Boolean);
+  // Chips only for what the icons can't show (power, hypercharge, buffies, nothing at all), plus the cost.
+  const iconShown = /star power|gadget|gear/i;
   const missing = (it, small) => (it.c?.missing.length
-    ? `<span class="miss${small ? ' sm' : ''}">${it.c.missing.map((t) => `<span>${esc(t)}</span>`).join('')}${it.c.penalty ? `<span class="cost">−${it.c.penalty.toFixed(1)}</span>` : ''}</span>`
+    ? `<span class="miss${small ? ' sm' : ''}">${it.c.missing.filter((t) => !iconShown.test(t) || /^No (star power|gadget)$/.test(t) && !DATA.brawlers[it.r[0]]?.b).map((t) => `<span>${esc(t)}</span>`).join('')}${it.c.penalty ? `<span class="cost" title="Points taken off the score for what's missing from your build">−${it.c.penalty.toFixed(1)} pts</span>` : ''}</span>`
     : it.c ? `<span class="miss ok${small ? ' sm' : ''}"><span>Fully built</span></span>` : '');
   const main = Object.entries(ORDERS).filter(([k, v]) => !v.more && (k !== 'banned' || hasBans));
   const more = Object.entries(ORDERS).filter(([, v]) => v.more);
@@ -329,7 +353,7 @@ function renderMap(m) {
         ${av(it.r[0], 'sq')}
         <span class="bn">${esc(B[it.r[0]]?.n)}</span>
         ${cls(it.r[0])}
-        ${build(it.r[0])}
+        ${build(it.r[0], false, it.c?.own)}
         ${notRanked(it.r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
         <span class="wrbig ${(ord === 'score' || ord === 'win' || ord === 'curated') && val(it) >= 55 ? 'hi' : ''}">${big(it)}<small> ${bigLabel}</small></span>
         ${missing(it)}
@@ -342,7 +366,7 @@ function renderMap(m) {
       <li>
         <span class="rk">${i + 6}</span>
         ${av(it.r[0], 'sq')}
-        <span class="rn"><b>${esc(B[it.r[0]]?.n)} ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true)}${missing(it, true)}<span>${[...sub(it.r), `${n(it.r[4])} games`].join(' · ')}</span></span>
+        <span class="rn"><b>${esc(B[it.r[0]]?.n)} ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true, it.c?.own)}${missing(it, true)}<span>${[...sub(it.r), `${n(it.r[4])} games`].join(' · ')}</span></span>
         <span class="barwrap"><span class="bar" style="width:${bar(val(it)).toFixed(0)}%"></span></span>
         <span class="wr">${big(it)}</span>
       </li>`).join('')}</ul>` : ''}`;
@@ -398,7 +422,7 @@ function legend(m, hasBans) {
     const measured = c && DATA.costs.n >= 2000;
     const fmt = (k, label) => (c?.[k]?.penalty ? `${label} −${c[k].penalty}` : null);
     const list = measured ? [fmt('powerLevel', 'each power level below 11'), fmt('noHypercharge', 'no hypercharge'), fmt('buffieMissing', 'each missing buffie'), fmt('noStarPower', 'no star power'), fmt('otherStarPower', 'other star power'), fmt('noGadget', 'no gadget'), fmt('otherGadget', 'other gadget'), fmt('gearMissing', 'each missing gear')].filter(Boolean) : [];
-    return `<b>Curated pick</b> ranks the brawlers you own (power 9+) by our score for this map, minus what each missing piece costs. ${measured
+    return `<b>Curated pick</b> ranks the brawlers you own (power 9+) by our score for this map, minus what each missing piece costs. Build icons in full colour are ones you have; grey ones with a red dot you don't have yet. ${measured
       ? `The costs are measured from ${DATA.costs.n.toLocaleString()} games of ${DATA.costs.players.toLocaleString()} Legendary+ players, comparing each player's games with and without the piece${list.length ? `: ${list.join(', ')} points` : ''}. Pieces that made no clear difference cost nothing.`
       : 'Until enough games are measured, the costs are estimates.'}`;
   }

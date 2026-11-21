@@ -290,3 +290,9 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .bi.sp img, .bi.gad img { position: relative; z-index: 1; width: 74%; height: 74%; }
 .bi.sp.close::before, .bi.gad.close::before { border-style: dashed; border-color: #c9a64a; }
 .bi.sp.close, .bi.gad.close { outline: none; opacity: .85; }
+
+/* owned / not owned build icons (Curated pick) */
+.bi.missing img { filter: grayscale(1); opacity: .35; }
+.bi.missing::before { border-color: #6d6584 !important; background: var(--panel2) !important; box-shadow: none !important; }
+.bi.missing::after { content: ""; position: absolute; top: -2px; right: -2px; z-index: 2; width: 7px; height: 7px; border-radius: 50%; background: #ff5a5a; box-shadow: 0 0 0 2px var(--panel); }
+.bi.have:not(.sp):not(.gad) { box-shadow: 0 0 0 1.5px var(--good); }
