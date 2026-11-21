@@ -296,3 +296,45 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .bi.missing::before { border-color: #6d6584 !important; background: var(--panel2) !important; box-shadow: none !important; }
 .bi.missing::after { content: ""; position: absolute; top: -2px; right: -2px; z-index: 2; width: 7px; height: 7px; border-radius: 50%; background: #ff5a5a; box-shadow: 0 0 0 2px var(--panel); }
 .bi.have:not(.sp):not(.gad) { box-shadow: 0 0 0 1.5px var(--good); }
+
+/* ---- UX pass: contrast, touch targets, density ---- */
+/* WCAG AA contrast for mode-coloured text: lighten the colour for text (dots keep it) */
+.mode, .lcard .lm { color: color-mix(in srgb, var(--mc) 72%, white); }
+/* touch targets (Apple HIG 44pt / WCAG 2.5.8): taller controls */
+.chip { min-height: 40px; padding: 6px 13px; }
+.seg button { min-height: 38px; padding: 8px 15px; }
+.more select { min-height: 42px; }
+.acct { min-height: 40px; }
+.back { padding: 10px 0; min-height: 44px; }
+.bi { width: 26px; height: 26px; }
+.build { gap: 4px; }
+.build.sm .bi { width: 24px; height: 24px; }
+.btn { min-height: 44px; }
+.morebtn { display: block; width: 100%; margin: 8px 0 0; min-height: 44px; border: 2px dashed var(--line); background: transparent; color: var(--dim); border-radius: 12px; font: 700 13.5px var(--f-body); cursor: pointer; }
+.morebtn:hover { border-color: var(--accent); color: var(--text); }
+.morebtn[hidden] { display: none; }
+/* map list: mode as a second line (phones hide the right-hand mode label) */
+.name { display: flex; flex-direction: column; }
+.name .nt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name .mline { display: none; font: 600 11.5px var(--f-body); color: var(--dim); }
+@media (max-width: 600px) { .name .mline { display: block; } }
+/* compact stats */
+.banchip { display: inline-block; margin: 3px 0 0 4px; font: 700 10px var(--f-body); color: #ff9c9c; background: color-mix(in srgb, #ff6b6b 16%, transparent); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.top5 .banchip { margin: 4px 0 0; }
+/* explanations collapsed by default */
+details.legend { margin: 12px 0 0; }
+details.legend summary { cursor: pointer; color: var(--dim); font-weight: 700; font-size: 12.5px; list-style: none; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; }
+details.legend summary::before { content: "?"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line); font-size: 11px; }
+details.legend summary::-webkit-details-marker { display: none; }
+details.legend[open] summary { color: var(--text); }
+details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-width: 68ch; }
+/* floating search button hides while the search box is visible */
+.fab { transition: transform .2s, opacity .2s; }
+.fab.away { opacity: 0; transform: scale(.6); pointer-events: none; }
+
+/* build icons fit one row on narrow phone cards (24px = WCAG 2.5.8 minimum) */
+@media (max-width: 600px) {
+  .top5 li { padding-left: 4px; padding-right: 4px; }
+  .top5 .build { gap: 2px; flex-wrap: nowrap; }
+  .top5 .bi { width: 24px; height: 24px; }
+}

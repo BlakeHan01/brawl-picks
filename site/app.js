@@ -178,15 +178,21 @@ function renderLive() {
   }).join('');
 }
 
+// Without a search, show Ranked and live maps; the rest (off-rotation special maps) sit behind
+// "Other maps" so the list stays short. Search always covers every map.
+let showOthers = false;
 function renderResults() {
   const text = q.value.trim();
-  shown = text ? searchMaps(text, pool()) : defaultList();
+  const all = text ? searchMaps(text, pool()) : defaultList();
+  const main = text || showOthers || modeFilter ? all : all.filter((m) => m.ranked || m.active);
+  const hiddenCount = all.length - main.length;
+  shown = main;
   sel = Math.min(sel, Math.max(0, shown.length - 1));
-  $('#listHead').innerHTML = text ? 'Matches <small>↑↓ to move · Enter to open</small>' : `All maps <small>${shown.length} · ranked first</small>`;
+  $('#listHead').innerHTML = text ? 'Matches <small>↑↓ to move · Enter to open</small>' : `${showOthers || modeFilter ? 'All maps' : 'Ranked and live maps'} <small>${shown.length}</small>`;
   results.innerHTML = shown.map((m, i) => `
     <li role="option" data-id="${esc(m.id)}" class="${i === sel ? 'sel' : ''}" aria-selected="${i === sel}">
       <span class="dot" style="--mc:${esc(m.modeColor || '#888')}"></span>
-      <span class="name">${highlight(m.name)}</span>
+      <span class="name"><span class="nt">${highlight(m.name)}</span><small class="mline">${esc(m.mode)}</small></span>
       <span class="meta">
         <span class="minis">${rowsOf(m).slice(0, 3).map((p) => av(p[0])).join('')}</span>
         ${m.ranked ? '<b class="tag">Ranked</b>' : ''}${m.active ? '<b class="tag live">Live</b>' : ''}
@@ -195,6 +201,10 @@ function renderResults() {
     </li>`).join('');
   hint.textContent = text && !shown.length ? 'No map matches. Try the first letter of each word.' : '';
   $('#liveWrap').hidden = !ROT.events.length || !!text;
+  const more = $('#moreMaps');
+  more.hidden = !!text || !!modeFilter || (!hiddenCount && !showOthers);
+  more.textContent = showOthers ? 'Show fewer maps' : `Other maps (${hiddenCount})`;
+  more.setAttribute('aria-expanded', String(showOthers));
 }
 
 function defaultList() {
@@ -327,11 +337,14 @@ function renderMap(m) {
   const bar = (v) => 12 + (88 * (v - lo)) / Math.max(0.1, hi - lo);
   const big = (it) => pct(val(it));
   const bigLabel = ord === 'curated' ? 'for you' : o.big;
+  // One short line of stats; picked % is in the order "Most picked" and the tooltip, bans show as
+  // a chip only when they matter (20%+), unless sorting by bans.
   const sub = (r) => [
     ord !== 'win' ? `${pct(r[2])} win` : null,
-    ord !== 'picked' ? `${pct(r[3])} picked` : null,
-    hasBans && ord !== 'banned' ? `${pct(r[5])} banned` : null,
+    `${n(r[4])} games`,
   ].filter(Boolean);
+  const banChip = (r) => (hasBans && ord !== 'banned' && r[5] >= 20 ? `<span class="banchip" title="Banned in ${pct(r[5])} of games here">Banned ${Math.round(r[5])}%</span>` : '');
+  const statTip = (r) => `${pct(r[2])} win · ${pct(r[3])} picked${hasBans ? ` · ${pct(r[5])} banned` : ''} · ${n(r[4])} games`;
   // Chips only for what the icons can't show (power, hypercharge, buffies, nothing at all), plus the cost.
   const iconShown = /star power|gadget|gear/i;
   const missing = (it, small) => (it.c?.missing.length
@@ -355,18 +368,18 @@ function renderMap(m) {
         ${cls(it.r[0])}
         ${build(it.r[0], false, it.c?.own)}
         ${notRanked(it.r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
-        <span class="wrbig ${(ord === 'score' || ord === 'win' || ord === 'curated') && val(it) >= 55 ? 'hi' : ''}">${big(it)}<small> ${bigLabel}</small></span>
+        <span class="wrbig ${(ord === 'score' || ord === 'win' || ord === 'curated') && val(it) >= 55 ? 'hi' : ''}" title="${esc(statTip(it.r))}">${big(it)}<small> ${bigLabel}</small></span>
         ${missing(it)}
-        ${sub(it.r).map((t) => `<span class="ur">${t}</span>`).join('')}
-        <span class="ur">${n(it.r[4])} games</span>
+        <span class="ur">${sub(it.r).join(' · ')}</span>
+        ${banChip(it.r)}
       </li>`).join('')}</ol>
-    <p class="legend">${legend(m, hasBans)}</p>
+    <details class="legend"><summary>How is this ranked?</summary><p>${legend(m, hasBans)}</p></details>
     ${rest.length ? `<h2>${o.head} <small>ranks 6–${items.length}</small></h2>
     <ul class="rest">${rest.map((it, i) => `
       <li>
         <span class="rk">${i + 6}</span>
         ${av(it.r[0], 'sq')}
-        <span class="rn"><b>${esc(B[it.r[0]]?.n)} ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true, it.c?.own)}${missing(it, true)}<span>${[...sub(it.r), `${n(it.r[4])} games`].join(' · ')}</span></span>
+        <span class="rn"><b>${esc(B[it.r[0]]?.n)} ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true, it.c?.own)}${missing(it, true)}<span title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}${banChip(it.r)}</span></span>
         <span class="barwrap"><span class="bar" style="width:${bar(val(it)).toFixed(0)}%"></span></span>
         <span class="wr">${big(it)}</span>
       </li>`).join('')}</ul>` : ''}`;
@@ -412,7 +425,7 @@ function renderCombos(m) {
   return `
     ${block('Best duos', m.combos.duos)}
     ${block('Best trios', m.combos.trios)}
-    <p class="legend"><b>Combos</b> are brawlers on the same team in ${m.basis === 'masters' || m.basis === 'legendary' || m.basis === 'ranked' ? 'Legendary+ Ranked' : 'high-trophy'} games on this map, last ${DATA.window?.days ?? 14} days. <b>Win %</b> is adjusted for skill and pulled toward 50% when there are few games, like single brawlers. <b>Together</b> is how much better (or worse) the combo did than its brawlers' own results add up to: a plus means they work well together.</p>`;
+    <details class="legend"><summary>How are combos ranked?</summary><p><b>Combos</b> are brawlers on the same team in ${m.basis === 'masters' || m.basis === 'legendary' || m.basis === 'ranked' ? 'Legendary+ Ranked' : 'high-trophy'} games on this map, last ${DATA.window?.days ?? 14} days. <b>Win %</b> is adjusted for skill and pulled toward 50% when there are few games, like single brawlers. <b>Together</b> is how much better (or worse) the combo did than its brawlers' own results add up to: a plus means they work well together.</p></details>`;
 }
 
 function legend(m, hasBans) {
@@ -523,6 +536,7 @@ function currentId() {
   return h ? decodeURIComponent(h[1]) : null;
 }
 function route() {
+  requestAnimationFrame(() => { const r = q.getBoundingClientRect(); fab.classList.toggle('away', !searchView.hidden && r.bottom > 0 && r.top < innerHeight); });
   const id = currentId();
   const map = id && mapsById.get(id);
   if (map) {
@@ -555,6 +569,7 @@ q.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') { q.value = ''; sel = 0; renderResults(); }
 });
 q.addEventListener('focus', () => q.select());
+$('#moreMaps').addEventListener('click', () => { showOthers = !showOthers; renderResults(); });
 results.addEventListener('click', (e) => {
   const li = e.target.closest('li[data-id]');
   if (li) open(li.dataset.id);
@@ -585,6 +600,10 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape' && !mapView.hidden) location.hash = '';
 });
 const fab = $('#searchFab');
+// No floating search button while the search box itself is on screen.
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(([en]) => fab.classList.toggle('away', en.isIntersecting && !searchView.hidden)).observe(q);
+}
 fab.title = `Search maps (/ or ${shortcut})`;
 fab.addEventListener('click', goSearch);
 $('#kbdHint').textContent = isMac ? '⌘K' : '/';
