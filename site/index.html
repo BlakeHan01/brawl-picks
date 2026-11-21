@@ -20,12 +20,16 @@
   <link rel="modulepreload" href="config.js" />
   <link rel="modulepreload" href="modes.js" />
   <link rel="modulepreload" href="curate.js" />
+  <link rel="modulepreload" href="advisor.js" />
 </head>
 <body>
   <div class="wrap">
     <header class="top">
       <a class="logo" href="#" title="Home">Brawl<span>Picks</span></a>
-      <button id="acctBtn" class="acct" hidden>Add player tag</button>
+      <nav class="hnav" aria-label="Main">
+        <a class="navlink" id="upLink" href="#upgrades">Upgrades</a>
+        <button id="acctBtn" class="acct" hidden>Add player tag</button>
+      </nav>
     </header>
 
     <main>
@@ -50,6 +54,13 @@
       </section>
 
       <section id="mapView" hidden></section>
+
+      <section id="upView" class="up" hidden aria-labelledby="upTitle">
+        <a class="back" href="#">← All maps</a>
+        <h1 id="upTitle">What should I upgrade?</h1>
+        <p class="up-lede">Enter what you have saved. You get the upgrades that make your best brawlers for the current Ranked maps the strongest, for the coins you spend.</p>
+        <div id="upBody"></div>
+      </section>
     </main>
 
     <footer class="foot" id="foot"></footer>

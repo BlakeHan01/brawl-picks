@@ -68,7 +68,8 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
   display: grid; grid-template-columns: 54px 1fr; min-width: 0; border: 2px solid transparent; text-decoration: none; color: inherit;
 }
 .lcard:hover { border-color: var(--mc); }
-.lcard.ended { opacity: .45; }
+.lcard.ended img { filter: grayscale(1); opacity: .4; } /* faded art, readable text (WCAG contrast) */
+.lcard.ended .lm { color: var(--dim); }
 .lcard .thumb { width: 54px; height: 72px; object-fit: cover; display: block; background: var(--mc); }
 .lcard .lt { padding: 8px 10px; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
 .lcard .lm { font-size: 11px; font-weight: 800; color: var(--mc); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -138,7 +139,6 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .rn b .cls, .rn b .build { display: inline-flex; gap: 3px; align-items: center; margin: 3px 0 1px; }
 .build.sm { display: flex; margin: 3px 0 1px; }
 .bi { position: relative; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--panel2); cursor: help; outline-offset: 1px; }
-.bi.close { outline: 1px dashed var(--dim); outline-offset: -1px; opacity: .8; }
 .build.sm .bi { width: 18px; height: 18px; border-radius: 5px; }
 .bi img { width: 86%; height: 86%; object-fit: contain; }
 .tip {
@@ -283,7 +283,6 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 /* star power and gadget icons use the in-game badge art (gold starburst / green badge) */
 .bi.sp, .bi.gad { background: transparent; }
 .bi.sp img, .bi.gad img { width: 100%; height: 100%; object-fit: contain; }
-.bi.sp.close, .bi.gad.close { outline: 1px dashed var(--dim); outline-offset: 1px; border-radius: 50%; opacity: .85; }
 
 /* owned / not owned build icons (Curated pick) */
 .bi.missing img { filter: grayscale(1); opacity: .35; }
@@ -334,3 +333,77 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
 /* all build icons: bare game art, no box (colour = have it, grey + red dot = don't) */
 .bi { background: transparent; }
 .bi img { width: 100%; height: 100%; object-fit: contain; }
+
+/* ---- header nav ---- */
+.hnav { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.navlink { color: var(--dim); text-decoration: none; font: 700 13.5px var(--f-body); padding: 0 12px; min-height: 40px; display: inline-flex; align-items: center; border-radius: 999px; }
+.navlink:hover { color: var(--text); }
+.navlink[aria-current="page"] { color: var(--accent); }
+
+/* ---- upgrades ---- */
+.up h1 { font: 400 32px/1.05 var(--f-display); margin: 4px 0 6px; text-wrap: balance; }
+.up-lede { color: var(--dim); margin: 0 0 16px; max-width: 62ch; }
+.coin, .pp { display: inline-flex; align-items: center; gap: 6px; }
+.coin::before, .pp::before { content: ""; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.coin::before { background: #ffd54a; }
+.pp::before { background: #c07bff; }
+.up-wallet { display: grid; gap: 10px; }
+.up-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.up-field { background: var(--panel); border: 2px solid var(--line); border-radius: var(--r); padding: 10px 14px; display: grid; gap: 2px; min-width: 0; }
+.up-field:focus-within { border-color: var(--accent); }
+.up-field label { display: flex; align-items: center; gap: 7px; font: 800 12px var(--f-body); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.up-field input { background: none; border: 0; outline: none; font: 700 24px var(--f-num); width: 100%; min-width: 0; padding: 4px 0 0; color: var(--text); }
+.up-field input::placeholder { color: var(--line); }
+.up-hint { margin: 0; color: var(--dim); font-size: 12.5px; }
+.up-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.up-summary { background: var(--panel); border-radius: var(--r); padding: 14px 16px; margin-top: 16px; display: grid; gap: 6px; }
+.up-summary p { margin: 0; }
+.up-big { font: 400 22px var(--f-display); }
+.up-up { color: var(--good); }
+.up-meter { height: 8px; border-radius: 99px; background: var(--panel2); overflow: hidden; }
+.up-meter i { display: block; height: 100%; background: #ffd54a; border-radius: 99px; }
+.up-spent { color: var(--dim); font-size: 13px; }
+.up-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.up-card { background: var(--panel); border-radius: var(--r); padding: 14px; display: grid; grid-template-columns: 26px 60px minmax(0, 1fr); gap: 4px 12px; align-items: start; }
+.up-list.later .up-card { grid-template-columns: 60px minmax(0, 1fr); background: transparent; border: 2px dashed var(--line); }
+.up-rank { font: 400 22px var(--f-display); color: var(--dim); text-align: center; padding-top: 16px; }
+.up-card .av.up-av { width: 60px; height: 60px; border-radius: 12px; background: transparent; font-size: 20px; }
+.up-main { display: grid; gap: 8px; min-width: 0; }
+.up-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; }
+.up-name { font: 400 21px/1.15 var(--f-display); margin: 0; letter-spacing: 0; text-transform: none; color: var(--text); display: flex; flex-direction: column; gap: 2px; }
+.up-now { font: 500 12.5px var(--f-body); color: var(--dim); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.up-cost { margin: 0; display: flex; gap: 12px; font: 700 13px var(--f-num); white-space: nowrap; }
+.up-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.up-step { display: inline-flex; align-items: center; gap: 6px; background: var(--panel2); border-radius: 8px; padding: 4px 10px 4px 6px; font-size: 13px; font-weight: 600; min-height: 30px; }
+.up-step.pw { padding-left: 10px; }
+.up-step.pw b { color: var(--accent); }
+.up-step img { width: 22px; height: 22px; object-fit: contain; }
+.up-step .k { color: var(--dim); font-weight: 500; }
+.up-why { margin: 0; font-size: 14px; max-width: 62ch; }
+.up-impact { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.up-bar { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; }
+.up-bar i { display: block; height: 100%; background: var(--good); border-radius: 99px; }
+.up-gain { font: 700 13px var(--f-num); color: var(--good); }
+.up-maps summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--dim); list-style: none; display: inline-flex; gap: 6px; align-items: center; min-height: 32px; }
+.up-maps summary::-webkit-details-marker { display: none; }
+.up-maps summary::before { content: "▸"; transition: transform .15s; }
+.up-maps[open] summary::before { transform: rotate(90deg); }
+.up-maps ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 14px; }
+.up-maps a { display: flex; align-items: center; gap: 8px; min-height: 32px; color: var(--text); text-decoration: none; font-size: 13px; min-width: 0; }
+.up-maps a:hover .mn { text-decoration: underline; }
+.up-maps .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.up-maps .mn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-maps .r { color: var(--dim); font: 500 12px var(--f-num); white-space: nowrap; }
+.up .num { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) {
+  .up h1 { font-size: 27px; }
+  .up-card { grid-template-columns: 48px minmax(0, 1fr); padding: 12px; }
+  .up-list.later .up-card { grid-template-columns: 48px minmax(0, 1fr); }
+  .up-rank { display: none; }
+  .up-card .av.up-av { width: 48px; height: 48px; }
+  .up-field input { font-size: 21px; }
+  .navlink { padding: 0 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .up-maps summary::before { transition: none; } }
+.acct .an { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@media (max-width: 400px) { .acct { max-width: 38vw; } }

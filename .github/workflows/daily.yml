@@ -95,7 +95,7 @@ jobs:
         run: |
           v=$(git rev-parse --short HEAD)
           sed -i "s#href=\"style.css\"#href=\"style.css?v=$v\"#; s#src=\"app.js\"#src=\"app.js?v=$v\"#; s#rel=\"modulepreload\" href=\"\([a-z-]*\)\.js\"#rel=\"modulepreload\" href=\"\1.js?v=$v\"#g" site/index.html
-          sed -i "s#from '\./\([a-z-]*\)\.js'#from './\1.js?v=$v'#g" site/app.js
+          sed -i "s#from '\./\([a-z-]*\)\.js'#from './\1.js?v=$v'#g" site/*.js
           grep -c "?v=$v" site/index.html site/app.js
 
       - uses: actions/configure-pages@v5

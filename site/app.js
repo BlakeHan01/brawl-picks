@@ -2,6 +2,7 @@ import { searchMaps, initials } from './search.js';
 import { API_BASE } from './config.js';
 import { modeName, modeColor, isSoloMode } from './modes.js';
 import { curate, costsFrom, normalizeTag } from './curate.js';
+import { upgradeChains, makePlan, saveUpFor } from './advisor.js';
 
 const $ = (s) => document.querySelector(s);
 const q = $('#q');
@@ -398,7 +399,7 @@ function renderMap(m) {
         </select>
       </label>
     </div>
-    ${ord === 'curated' && PLAYER ? `<p class="for">For <b>${esc(PLAYER.name)}</b> · <a href="#" id="changeAcct">change</a></p>` : ''}
+    ${ord === 'curated' && PLAYER ? `<p class="for">For <b>${esc(PLAYER.name)}</b> · <a href="#" id="changeAcct">change</a> · <a href="#upgrades">What to upgrade</a></p>` : ''}
     ${body}`;
   const setOrder = (k) => { order = k; store.set('order', order); renderMap(m); };
   mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => setOrder(b.dataset.order)));
@@ -446,11 +447,153 @@ function legend(m, hasBans) {
   return `<b>Most picked</b> orders brawlers by how often these players chose them here. Popular brawlers are safe meta picks, but they don't always win the most. ${skill}`;
 }
 
+// ---------- upgrades: what to spend coins and power points on (see advisor.js) ----------
+const upView = $('#upView');
+const PRESETS = [['A little', 3000, 1000], ['A few weeks', 12000, 4000], ['A big stash', 30000, 12000]];
+const parseAmount = (s) => Math.min(9999999, Math.max(0, parseInt(String(s).replace(/[^0-9]/g, ''), 10) || 0));
+let WALLET = (() => { try { const w = JSON.parse(store.get('wallet') || 'null'); return w && Number.isFinite(w.c) ? w : null; } catch { return null; } })();
+let upCache = null; // chains for the current player + data
+function upChains() {
+  const key = `${PLAYER?.tag}|${PLAYER?.fetchedAt}|${DATA.generatedAt}`;
+  if (upCache?.key !== key) {
+    const maps = MAPS.filter((m) => m.ranked && rowsOf(m).length);
+    const builds = Object.fromEntries(Object.entries(DATA.brawlers).map(([id, b]) => [id, b.b || {}]));
+    const names = Object.fromEntries(Object.entries(DATA.items || {}).map(([id, it]) => [id, it.n]));
+    upCache = { key, maps, ...upgradeChains(PLAYER, maps, builds, costsFrom(DATA.costs), names) };
+  }
+  return upCache;
+}
+const KIND = { gadget: 'Gadget', starPower: 'Star power', gear: 'Gear' };
+function upSteps(chain, from, to) {
+  const out = [];
+  let pw = null; // merge back-to-back power steps: "Power 8 → 11"
+  const flush = () => { if (pw) { out.push(`<li class="up-step pw">Power <b>${pw[0]} → ${pw[1]}</b></li>`); pw = null; } };
+  for (const st of chain.slice(from, to + 1)) {
+    if (st.kind === 'power') { const [, a, b] = st.label.match(/(\d+)\D+(\d+)/); pw = pw ? [pw[0], b] : [a, b]; continue; }
+    flush();
+    const it = st.item != null && DATA.items?.[st.item];
+    const icon = it?.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : '';
+    out.push(`<li class="up-step">${icon}${KIND[st.kind] ? `<span class="k">${KIND[st.kind]}</span> ${esc(st.label === KIND[st.kind] ? '' : st.label)}` : esc(st.label)}</li>`);
+  }
+  flush();
+  return `<ul class="up-steps" aria-label="What to buy">${out.join('')}</ul>`;
+}
+// Plain-language reason, from where the brawler lands in your top 3 after the package.
+function upWhy(id, chain, from, to, maps) {
+  const own = PLAYER.brawlers.find((b) => Number(b.id) === Number(id));
+  const top = chain[to].top;
+  const byMode = {};
+  for (const [mi] of top) { const m = maps[mi]; const r = rowsOf(m).find((x) => Number(x[0]) === Number(id)); (byMode[m.mode] ||= []).push(r ? r[2] : 50); }
+  const modes = Object.entries(byMode).sort((a, b) => b[1].length - a[1].length).slice(0, 2)
+    .map(([mode, w]) => `<b>${esc(mode)}</b> (${w.length} map${w.length > 1 ? 's' : ''}, ${(w.reduce((s, x) => s + x, 0) / w.length).toFixed(1)}% win)`);
+  const firsts = top.filter((x) => x[1] === 1).length;
+  const out = [];
+  if (own && own.power < 9 && from === 0) out.push(`Gets it to power 9, so Curated pick can use it.`);
+  if (top.length) out.push(`One of your top 3 on <b>${top.length} of ${maps.length}</b> Ranked maps${firsts ? `, your #1 on ${firsts}` : ''}. Strongest in ${modes.join(' and ')}.`);
+  let big = null;
+  for (let k = from; k <= to; k++) if (!big || chain[k].gain > big.gain) big = chain[k];
+  if (to > from && big) out.push(`Biggest jump: ${esc(big.kind === 'power' || big.kind === 'hypercharge' || big.kind === 'buffie' ? big.label : `${KIND[big.kind]} ${big.label}`)}.`);
+  return out.join(' ');
+}
+function upCard(p, rank, maxGain, U) {
+  const chain = U.chains[p.id], b = DATA.brawlers[p.id] || { n: '?' };
+  const own = PLAYER.brawlers.find((x) => Number(x.id) === Number(p.id));
+  const top = [...chain[p.to].top].sort((x, y) => x[1] - y[1]);
+  return `<li class="up-card">
+    ${rank ? `<span class="up-rank" aria-hidden="true">${rank}</span>` : ''}
+    ${av(p.id, 'sq up-av')}
+    <div class="up-main">
+      <div class="up-head">
+        <h3 class="up-name">${esc(b.n)} <span class="up-now">${cls(p.id)} power ${own?.power ?? '?'} now</span></h3>
+        <p class="up-cost"><span class="coin">${n(p.coins)}<span class="sr"> coins</span></span>${p.pp ? `<span class="pp">${n(p.pp)}<span class="sr"> power points</span></span>` : ''}</p>
+      </div>
+      ${upSteps(chain, p.from, p.to)}
+      <p class="up-why">${upWhy(p.id, chain, p.from, p.to, U.maps)}</p>
+      <div class="up-impact"><span class="up-bar" aria-hidden="true"><i style="width:${Math.max(4, (100 * p.gain) / maxGain).toFixed(0)}%"></i></span><span class="up-gain" title="How much this raises your average top-3 pick across Ranked maps">+${p.gain.toFixed(2)} pts</span></div>
+      ${top.length ? `<details class="up-maps"><summary>Maps where it's in your top 3</summary><ul>${top.map(([mi, r]) => { const m = U.maps[mi]; return `<li><a href="#m-${esc(m.id)}"><span class="dot" style="background:${esc(m.modeColor || '#888')}"></span><span class="mn">${esc(m.name)}</span><span class="r">#${r} for you</span></a></li>`; }).join('')}</ul></details>` : ''}
+    </div>
+  </li>`;
+}
+function renderUpgrades() {
+  const body = $('#upBody');
+  if (!PLAYER) {
+    body.innerHTML = `<div class="prompt"><p>Add your player tag and we'll look at the brawlers you own and how built up they are. Nothing is shared: it's saved on this device only.</p><button class="btn" id="upLinkTag" type="button">Add your player tag</button></div>`;
+    $('#upLinkTag').addEventListener('click', openAcct);
+    return;
+  }
+  const U = upChains();
+  if (!U.maps.length) { body.innerHTML = '<p class="empty">No Ranked map data yet. Check back after the next stats update.</p>'; return; }
+  body.innerHTML = `
+    <form class="up-wallet" id="upWallet" novalidate>
+      <div class="up-fields">
+        <div class="up-field"><label for="upCoins"><span class="coin"></span>Coins</label><input id="upCoins" inputmode="numeric" autocomplete="off" placeholder="0" aria-describedby="upHint"></div>
+        <div class="up-field"><label for="upPP"><span class="pp"></span>Power points</label><input id="upPP" inputmode="numeric" autocomplete="off" placeholder="0" aria-describedby="upHint"></div>
+      </div>
+      <p class="up-hint" id="upHint">Your coins and power points are shown at the top of the game's home screen. The game doesn't share them, so type them in.</p>
+      <div class="up-presets" role="group" aria-label="Example amounts">${PRESETS.map(([l, c, p]) => `<button type="button" class="chip" data-c="${c}" data-p="${p}">${l}</button>`).join('')}</div>
+    </form>
+    <section class="up-summary" id="upSummary" aria-live="polite" aria-atomic="true"></section>
+    <div id="upPlan"></div>
+    <details class="legend"><summary>How are these picked?</summary>
+      <p>For each current Ranked map, your Curated pick takes your brawlers at power 9 or higher and subtracts points for what's missing from their build. An upgrade is worth how much it raises your <b>top 3 picks</b>, averaged over all ${U.maps.length} Ranked maps, so a brawler that's strong on many maps and nearly finished comes first. Upgrades are grouped per brawler, because power 10 → 11 only pays off after the earlier steps.</p>
+      <p>The plan takes the best value per coin that fits what you have, then the next, until nothing fits. A power point counts as half a coin when comparing value. ${(DATA.costs?.n ?? 0) >= 20000 ? 'The points each missing piece costs are measured from Ranked games.' : 'The points each missing piece costs are estimates until enough Ranked games are measured.'}</p>
+      <p>Prices: power 1 → 11 costs 7,765 coins and 3,740 power points in total; gadget 1,000 coins; star power 2,000; gear 1,000; hypercharge 5,000; buffie 1,000 coins and 2,000 power points.</p>
+    </details>`;
+  const ci = $('#upCoins'), pi = $('#upPP');
+  if (WALLET) { ci.value = n(WALLET.c); pi.value = n(WALLET.p); }
+  let t = null;
+  const update = (now = false) => {
+    WALLET = ci.value === '' && pi.value === '' ? null : { c: parseAmount(ci.value), p: parseAmount(pi.value) };
+    store.set('wallet', WALLET ? JSON.stringify(WALLET) : '');
+    clearTimeout(t);
+    if (now) upPlan(U); else t = setTimeout(() => upPlan(U), 250); // don't announce every keystroke
+  };
+  for (const el of [ci, pi]) {
+    el.addEventListener('input', () => update());
+    el.addEventListener('blur', () => { if (el.value !== '') el.value = n(parseAmount(el.value)); });
+  }
+  $('#upWallet').addEventListener('submit', (e) => { e.preventDefault(); update(true); });
+  body.querySelectorAll('.up-presets .chip').forEach((b) => b.addEventListener('click', () => { ci.value = n(+b.dataset.c); pi.value = n(+b.dataset.p); update(true); }));
+  upPlan(U);
+}
+function upPlan(U) {
+  const sum = $('#upSummary'), out = $('#upPlan');
+  document.querySelectorAll('.up-presets .chip').forEach((b) => b.setAttribute('aria-pressed', String(!!WALLET && +b.dataset.c === WALLET.c && +b.dataset.p === WALLET.p)));
+  if (!Object.keys(U.chains).length) {
+    sum.innerHTML = '<p class="up-big">Nothing left to upgrade</p><p>Every brawler of yours that matters on the current Ranked maps is fully built.</p>';
+    out.innerHTML = '';
+    return;
+  }
+  if (!WALLET) {
+    // no amounts yet: show the best-value upgrades on the account
+    const best = makePlan(U.chains, Infinity, Infinity, 5);
+    const maxG = Math.max(0.01, ...best.list.map((x) => x.gain));
+    sum.innerHTML = `<p>Enter your coins and power points above, or tap an example amount, for a plan that fits what you have.</p>`;
+    out.innerHTML = `<h2>Best value on your account <small>top 5</small></h2><ol class="up-list">${best.list.map((p, i) => upCard(p, i + 1, maxG, U)).join('')}</ol>`;
+    return;
+  }
+  const plan = makePlan(U.chains, WALLET.c, WALLET.p);
+  const gain = plan.list.reduce((s, x) => s + x.gain, 0);
+  // other brawlers only: the plan's own brawlers already have a card
+  const inPlan = new Set(plan.list.map((x) => x.id));
+  const later = saveUpFor(Object.fromEntries(Object.entries(U.chains).filter(([id]) => !inPlan.has(id))), plan);
+  const maxG = Math.max(0.01, ...plan.list.map((x) => x.gain), ...later.map((x) => x.gain));
+  const spentC = WALLET.c - plan.coinsLeft, spentP = WALLET.p - plan.ppLeft;
+  sum.innerHTML = plan.list.length
+    ? `<p class="up-big">${plan.list.length} upgrade${plan.list.length > 1 ? 's' : ''} <span class="up-up">+${gain.toFixed(2)} pts</span></p>
+       <p>Your average top-3 pick on Ranked maps goes from <b class="num">${U.strength.toFixed(1)}</b> to <b class="num">${(U.strength + gain).toFixed(1)}</b>.</p>
+       <div class="up-meter" aria-hidden="true"><i style="width:${WALLET.c ? ((100 * spentC) / WALLET.c).toFixed(0) : 0}%"></i></div>
+       <p class="up-spent">Uses ${n(spentC)} of ${n(WALLET.c)} coins and ${n(spentP)} of ${n(WALLET.p)} power points.</p>`
+    : `<p class="up-big">Nothing fits yet</p><p>The cheapest useful upgrade costs more than you have. Here's what's worth saving up for.</p>`;
+  out.innerHTML = `${plan.list.length ? `<h2>Your plan <small>best value first</small></h2><ol class="up-list">${plan.list.map((p, i) => upCard(p, i + 1, maxG, U)).join('')}</ol>` : ''}
+    ${later.length ? `<h2>Worth saving up for</h2><ul class="up-list later">${later.map((p) => upCard(p, 0, maxG, U)).join('')}</ul>` : ''}`;
+}
+
 // ---------- account (player tag -> Worker -> the player's brawlers) ----------
 function renderAcct() {
   const b = $('#acctBtn');
   b.hidden = !API_BASE;
-  b.innerHTML = PLAYER ? `<span class="dotok"></span>${esc(PLAYER.name)}` : 'Add player tag';
+  b.innerHTML = PLAYER ? `<span class="dotok"></span><span class="an">${esc(PLAYER.name)}</span>` : 'Add player tag';
   b.title = PLAYER ? `Linked: ${PLAYER.tag}` : 'Add your player tag for Curated pick';
 }
 // Modal dialog per the WAI-ARIA dialog pattern: focus moves in, Tab stays inside,
@@ -565,7 +708,17 @@ function route() {
   requestAnimationFrame(() => { const r = q.getBoundingClientRect(); fab.classList.toggle('away', !searchView.hidden && r.bottom > 0 && r.top < innerHeight); });
   const id = currentId();
   const map = id && mapsById.get(id);
-  if (map) {
+  upView.hidden = true;
+  const onUp = location.hash === '#upgrades';
+  if (onUp) $('#upLink').setAttribute('aria-current', 'page'); else $('#upLink').removeAttribute('aria-current');
+  if (onUp) {
+    renderUpgrades();
+    upView.hidden = false;
+    mapView.hidden = true;
+    searchView.hidden = true;
+    document.title = 'Upgrades · Brawl Picks';
+    window.scrollTo(0, 0);
+  } else if (map) {
     renderMap(map);
     mapView.hidden = false;
     searchView.hidden = true;
@@ -614,7 +767,7 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const shortcut = isMac ? '⌘K' : 'Ctrl+K';
 function goSearch() {
   hideTip();
-  if (!mapView.hidden) { location.hash = ''; route(); } // show the search screen now, not after hashchange
+  if (searchView.hidden) { location.hash = ''; route(); } // show the search screen now, not after hashchange
   window.scrollTo(0, 0);
   q.focus(); // inside the tap/keypress, so phones open the keyboard
   q.select();
