@@ -1,0 +1,8 @@
+{
+  "name": "brawl-picks-ux-check",
+  "private": true,
+  "type": "module",
+  "description": "Walks every user flow of the site in a real browser and checks accessibility, navigation and layout.",
+  "scripts": { "check": "node check.mjs" },
+  "dependencies": { "axe-core": "4.10.2", "playwright": "1.49.1" }
+}

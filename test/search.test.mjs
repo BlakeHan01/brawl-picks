@@ -42,3 +42,18 @@ test('name prefix and substring', () => {
   assert.ok(names('potato').includes('Hot Potato'));
   assert.equal(matchScore('zzz', 'Hot Potato'), null);
 });
+
+import { searchBrawlers } from '../site/search.js';
+const BR = [{ id: 1, name: 'Belle' }, { id: 2, name: 'Bea' }, { id: 3, name: 'Mr. P' }, { id: 4, name: '8-Bit' }, { id: 5, name: 'El Primo' }, { id: 6, name: 'Shelly' }, { id: 7, name: 'Barley' }];
+test('brawler search: name prefixes, punctuation ignored', () => {
+  assert.deepEqual(searchBrawlers('be', BR).map((b) => b.name), ['Bea', 'Belle']);
+  assert.deepEqual(searchBrawlers('mr p', BR).map((b) => b.name), ['Mr. P']);
+  assert.deepEqual(searchBrawlers('8bit', BR).map((b) => b.name), ['8-Bit']);
+  assert.deepEqual(searchBrawlers('primo', BR).map((b) => b.name), ['El Primo']);
+  assert.deepEqual(searchBrawlers('ell', BR).map((b) => b.name), ['Belle', 'Shelly']); // substring from 3 letters
+});
+test('brawler search: map initials and single letters stay quiet', () => {
+  assert.deepEqual(searchBrawlers('hrm', BR), []);
+  assert.deepEqual(searchBrawlers('', BR), []);
+  assert.deepEqual(searchBrawlers('b', BR).map((b) => b.name), ['Barley', 'Bea', 'Belle', '8-Bit']); // names first, then words (8-Bit)
+});

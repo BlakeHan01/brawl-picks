@@ -71,3 +71,12 @@ export function normalizeTag(raw) {
   const t = String(raw || '').trim().replace(/^#/, '').toUpperCase().replace(/O/g, '0');
   return /^[0289PYLQGRJCUV]{3,12}$/.test(t) ? t : null;
 }
+
+// The game API lists buffies (all false) for every brawler, even ones that have none in the game.
+// Keep buffies only for brawlers that really have them (data.buffies); without that list, ignore
+// buffies entirely rather than count them as missing.
+export function withRealBuffies(profile, buffyIds) {
+  if (!profile?.brawlers) return profile;
+  const has = new Set((buffyIds || []).map(Number));
+  return { ...profile, brawlers: profile.brawlers.map((b) => (b.buffies && !has.has(Number(b.id)) ? (({ buffies, ...rest }) => rest)(b) : b)) };
+}

@@ -10,7 +10,8 @@
     "dev": "node scripts/serve.mjs",
     "demo": "node scripts/demo-data.mjs && node scripts/serve.mjs --demo",
     "test": "node --test test/*.test.mjs worker/test/*.test.mjs",
-    "pull-data": "git fetch origin data && git archive FETCH_HEAD | tar -x"
+    "pull-data": "git fetch origin data && git archive FETCH_HEAD | tar -x",
+    "ux-check": "cd tools/ux-check && node check.mjs"
   },
   "engines": {
     "node": ">=20"

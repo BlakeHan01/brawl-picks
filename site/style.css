@@ -135,7 +135,7 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
   display: grid; place-items: center; font-family: var(--f-display); font-size: 15px; color: var(--accent-ink); background: var(--accent);
 }
 .bn { font-weight: 800; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cls { font: 800 10px var(--f-body); text-transform: uppercase; letter-spacing: .05em; border-radius: 4px; padding: 1px 6px; white-space: nowrap; vertical-align: middle; color: var(--cc); background: color-mix(in srgb, var(--cc) 18%, transparent); }
+.cls { font: 800 10px var(--f-body); text-transform: uppercase; letter-spacing: .05em; border-radius: 4px; padding: 1px 6px; white-space: nowrap; vertical-align: middle; color: color-mix(in srgb, var(--cc) 78%, white); background: color-mix(in srgb, var(--cc) 18%, transparent); }
 .rn b .cls, .rn b .build { display: inline-flex; gap: 3px; align-items: center; margin: 3px 0 1px; }
 .build.sm { display: flex; margin: 3px 0 1px; }
 .bi { position: relative; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--panel2); cursor: help; outline-offset: 1px; }
@@ -147,7 +147,7 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
   padding: 6px 9px; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.4);
 }
 .nr { font: 800 9.5px var(--f-body); margin-left: 4px; }
-.rn b .cls { color: var(--cc); }
+.rn b .cls { color: color-mix(in srgb, var(--cc) 78%, white); }
 .rn b .nr { color: var(--warn); }
 .cls-dmg { --cc: #ff6b6b; }
 .cls-tank { --cc: #ffa24c; }
@@ -407,3 +407,92 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
 @media (prefers-reduced-motion: reduce) { .up-maps summary::before { transition: none; } }
 .acct .an { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 @media (max-width: 400px) { .acct { max-width: 38vw; } }
+
+/* ---- brawler search option + brawler page ---- */
+.results li.bopt .av { width: 34px; height: 34px; border-radius: 8px; background: transparent; flex: none; }
+.bbest { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+@media (max-width: 600px) { .bbest { display: none; } }
+.bp-head { display: flex; align-items: center; gap: 14px; margin: 4px 0 14px; }
+.bp-head .av.bp-av { width: 84px; height: 84px; border-radius: 16px; background: transparent; font-size: 28px; flex: none; }
+.bp-head h1 { font: 400 34px/1 var(--f-display); margin: 0 0 6px; }
+.bp-cls { margin: 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.bp-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.bp-tile { background: var(--panel); border-radius: var(--r); padding: 10px 12px; display: grid; gap: 2px; }
+.bp-tile b { font-size: 22px; }
+.bp-tile span { color: var(--dim); font: 800 11.5px var(--f-body); letter-spacing: .08em; text-transform: uppercase; }
+.bp-build .build { gap: 8px; }
+.bp-build .bi { width: 36px; height: 36px; }
+.bp-you { margin: 12px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13.5px; color: var(--dim); }
+.bp-you .miss { margin: 0; }
+.bp-you a { color: var(--accent); font-weight: 700; }
+.bp-modes { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.bp-modes li { display: inline-flex; align-items: center; gap: 7px; background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; min-height: 34px; }
+.bp-modes .d { width: 8px; height: 8px; border-radius: 50%; background: var(--mc); }
+.bp-modes b { font-size: 12.5px; }
+.bp-maps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.bp-maps a { display: flex; align-items: center; gap: 10px; background: var(--panel); border-radius: 12px; padding: 8px 12px; min-height: 48px; color: var(--text); text-decoration: none; }
+.bp-maps a:hover { background: var(--panel2); }
+.bp-maps .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--mc); flex: none; }
+.bp-maps .name { flex: 1; min-width: 0; }
+.bp-maps .name .mline { display: block; }
+.bp-rk { font-weight: 700; min-width: 52px; text-align: right; }
+.bp-rk small { color: var(--dim); font-weight: 500; }
+.bp-wr { color: var(--dim); font-size: 13px; min-width: 50px; text-align: right; }
+.bp-mates { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.bp-mates a { display: flex; align-items: center; gap: 8px; background: var(--panel); border-radius: 12px; padding: 8px 10px; min-height: 52px; color: var(--text); text-decoration: none; min-width: 0; }
+.bp-mates a:hover { background: var(--panel2); }
+.bp-mates .av { width: 36px; height: 36px; border-radius: 8px; background: transparent; flex: none; }
+.bp-mates .bn { flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-mates .num { font-size: 12.5px; }
+.bp-mates .up { color: var(--good); font: 700 11px var(--f-num); }
+@media (max-width: 400px) { .bp-tile b { font-size: 19px; } .bp-head .av.bp-av { width: 68px; height: 68px; } .bp-head h1 { font-size: 28px; } }
+.bp-maps .nt2 { display: none; }
+@media (max-width: 480px) {
+  .bp-maps .tag { display: none; }
+  .bp-maps .nt2 { display: inline; }
+  .bp-maps a { gap: 8px; padding: 8px 10px; }
+  .bp-rk { min-width: 46px; }
+  .bp-wr { min-width: 44px; }
+}
+
+/* ---- search clear button ---- */
+#q::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+.qclear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--dim); cursor: pointer; }
+.qclear:hover { color: var(--text); background: var(--panel2); }
+.qclear[hidden], .sb kbd[hidden] { display: none; }
+
+/* ---- tappable brawler names ---- */
+/* standalone names in cards: no underline at rest (too busy in a grid of names); underline on hover / focus */
+.bname { all: unset; cursor: pointer; color: inherit; font: inherit; text-decoration: none; text-decoration-thickness: 1.5px; text-underline-offset: 3px; border-radius: 4px; min-height: 24px; display: inline-flex; align-items: center; }
+.bname:hover, .bname:focus-visible { text-decoration: underline; text-decoration-color: var(--accent); }
+.bname:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top5 .bname { justify-content: center; }
+
+/* ---- brawler card (dialog) ---- */
+.bpop-in { width: min(440px, 100%); max-height: min(86vh, 720px); overflow-y: auto; gap: 12px; }
+.bpop-head { display: flex; align-items: center; gap: 12px; }
+.bpop-head > div { flex: 1; min-width: 0; }
+.bpop-head .av.bp-av { width: 60px; height: 60px; border-radius: 12px; background: transparent; flex: none; }
+.bpop-head h2 { margin: 0 0 4px; font: 400 26px/1 var(--f-display); color: var(--text); text-transform: none; letter-spacing: 0; display: block; }
+.bpop-x { flex: none; width: 44px; height: 44px; border: 0; border-radius: 12px; background: var(--panel2); color: var(--text); font-size: 18px; cursor: pointer; align-self: flex-start; }
+.bpop-x:hover { background: var(--line); }
+.bpop-in .bp-tile { background: var(--bg); }
+.bpop-in .bp-tile b { font-size: 19px; }
+.bpop-in .bp-you { margin: 0; }
+.bpop-h { margin: 4px 0 0; font: 800 11.5px var(--f-body); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.bp-maps.sm a { background: var(--bg); min-height: 44px; }
+.bpop-more { align-self: stretch; text-align: center; text-decoration: none; display: grid; place-items: center; }
+@media (max-width: 520px) {
+  #bpop { align-items: end; padding: 0; }
+  #bpop .bpop-in { width: 100%; border-radius: 18px 18px 0 0; max-height: 88vh; padding-bottom: max(18px, env(safe-area-inset-bottom, 0px)); }
+}
+/* build icons never shrink below 24px; on very narrow phones they wrap instead (WCAG 2.5.8) */
+.top5 .bi, .build .bi { flex: none; }
+@media (max-width: 360px) { .top5 .build { flex-wrap: wrap; justify-content: center; } }
+/* brawler pictures that open the card */
+.av.pop { cursor: pointer; transition: transform .12s; }
+.av.pop:hover { transform: scale(1.05); }
+@media (prefers-reduced-motion: reduce) { .av.pop { transition: none; } .av.pop:hover { transform: none; } }
+/* small "Few games" flag (replaces raw game counts on cards) */
+.few { display: inline-block; font: 700 10.5px var(--f-body); color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-radius: 4px; padding: 1px 6px; }
+.up-gain { font: 700 12.5px var(--f-body); }
