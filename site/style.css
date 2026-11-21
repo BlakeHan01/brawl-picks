@@ -280,22 +280,14 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .wr.hi { color: var(--good); }
 @media (max-width: 600px) { .cav .av { width: 34px; height: 34px; } .combos li { grid-template-columns: 20px auto minmax(0, 1fr) 52px; gap: 8px; } }
 
-/* game-style gold diamond frame for star power and gadget icons */
-.bi.sp, .bi.gad { background: transparent; overflow: visible; }
-.bi.sp::before, .bi.gad::before {
-  content: ""; position: absolute; inset: 3px; transform: rotate(45deg); border-radius: 3px;
-  background: linear-gradient(135deg, #3a2a08, #1d1406); border: 2px solid #f5c443;
-  box-shadow: 0 0 0 1px #6b4a0c, inset 0 0 0 1px rgba(255, 230, 150, .35);
-}
-.bi.sp img, .bi.gad img { position: relative; z-index: 1; width: 74%; height: 74%; }
-.bi.sp.close::before, .bi.gad.close::before { border-style: dashed; border-color: #c9a64a; }
-.bi.sp.close, .bi.gad.close { outline: none; opacity: .85; }
+/* star power and gadget icons use the in-game badge art (gold starburst / green badge) */
+.bi.sp, .bi.gad { background: transparent; }
+.bi.sp img, .bi.gad img { width: 100%; height: 100%; object-fit: contain; }
+.bi.sp.close, .bi.gad.close { outline: 1px dashed var(--dim); outline-offset: 1px; border-radius: 50%; opacity: .85; }
 
 /* owned / not owned build icons (Curated pick) */
 .bi.missing img { filter: grayscale(1); opacity: .35; }
-.bi.missing::before { border-color: #6d6584 !important; background: var(--panel2) !important; box-shadow: none !important; }
 .bi.missing::after { content: ""; position: absolute; top: -2px; right: -2px; z-index: 2; width: 7px; height: 7px; border-radius: 50%; background: #ff5a5a; box-shadow: 0 0 0 2px var(--panel); }
-.bi.have:not(.sp):not(.gad) { box-shadow: 0 0 0 1.5px var(--good); }
 
 /* ---- UX pass: contrast, touch targets, density ---- */
 /* WCAG AA contrast for mode-coloured text: lighten the colour for text (dots keep it) */
@@ -338,3 +330,7 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
   .top5 .build { gap: 2px; flex-wrap: nowrap; }
   .top5 .bi { width: 24px; height: 24px; }
 }
+
+/* all build icons: bare game art, no box (colour = have it, grey + red dot = don't) */
+.bi { background: transparent; }
+.bi img { width: 100%; height: 100%; object-fit: contain; }

@@ -507,8 +507,8 @@ async function main() {
   const items = {};
   const want = [];
   for (const b of Object.values(B)) {
-    if (b.b?.sp) want.push(['star-powers', b.b.sp[0]]);
-    if (b.b?.gad) want.push(['gadgets', b.b.gad[0]]);
+    if (b.b?.sp) want.push(['star-powers-framed', b.b.sp[0]]);
+    if (b.b?.gad) want.push(['gadgets-framed', b.b.gad[0]]);
     for (const g of b.b?.gear?.[0] || []) want.push(['gears', g]);
   }
   await pool(want, 8, async ([kind, id]) => { items[id] = { n: itemNames[id] || '', img: await ensureImage(kind, id) }; });

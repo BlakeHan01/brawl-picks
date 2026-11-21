@@ -72,13 +72,14 @@ export { MODE_INFO, RANKED_MODES, modeName, isSoloMode, modeColor } from '../sit
 // ---------- images (self-hosted copies of Brawlify CDN art) ----------
 const exists = (p) => access(p).then(() => true, () => false);
 
-// kind: 'brawlers' | 'maps' | 'star-powers' | 'gadgets' | 'gears'. Returns the site-relative path, or null if unavailable.
+// kind: 'brawlers' | 'maps' | 'star-powers-framed' | 'gadgets-framed' | 'gears'. Returns the site-relative path, or null if unavailable.
 export async function ensureImage(kind, id) {
   const rel = `img/${kind}/${id}.png`;
   const file = resolve(ROOT, 'site', rel);
   if (await exists(file)) return rel;
   if (process.env.IMAGES === 'off') return null;
-  const path = { brawlers: 'brawlers/borderless', maps: 'maps/regular', 'star-powers': 'star-powers/borderless', gadgets: 'gadgets/borderless', gears: 'gears/regular' }[kind];
+  // star powers / gadgets: the "regular" art includes the in-game badge frame
+  const path = { brawlers: 'brawlers/borderless', maps: 'maps/regular', 'star-powers-framed': 'star-powers/regular', 'gadgets-framed': 'gadgets/regular', gears: 'gears/regular' }[kind];
   if (!path) return null;
   const src = `${CDN}/${path}/${id}.png`;
   try {
