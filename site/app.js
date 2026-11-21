@@ -246,10 +246,13 @@ const cls = (id) => {
   return c ? `<span class="cls cls-${CLASS_KEY[c] || 'other'}">${esc(c)}</span>` : '';
 };
 // Best build: icons with a tooltip (hover, or tap on a phone). From what Legendary+ players chose:
-// the star power / gadget they bought first when they owned only one, and the two gears they own.
+// the gadget / star power they bought first when they owned only one, and the two gears they own.
+// Order matches the game: gadget, star power, gears.
 // own (optional): the linked player's copy of this brawler. Then each icon also shows whether they
 // have it: full colour = have it, grey with a red dot = don't have it yet.
-function build(id, small = false, own = null) {
+// named: one line per piece with its name next to the icon (top 5 cards), so it can be read at a
+// glance during the draft; otherwise a compact row of icons.
+function build(id, small = false, own = null, named = false) {
   const b = DATA.brawlers[id]?.b;
   if (!b) return '';
   const I = DATA.items || {};
@@ -270,27 +273,34 @@ function build(id, small = false, own = null) {
     const other = otherIds.map((x) => I[x]?.n).filter(Boolean);
     return other.length ? ` · You have ${other.join(', ')} instead` : ` · You have the other ${label} instead`;
   };
-  const parts = [];
-  if (b.sp) {
-    const mine = own ? ids(own.starPowers) : null;
-    const has = own ? mine.includes(b.sp[0]) : null;
-    parts.push(icon(b.sp[0], { kind: 'sp', close: !b.sp[3], has, tip: `Star power: ${I[b.sp[0]]?.n} · ${why(b.sp, 'chose it first')}${ownedNote(has, mine || [], 'star power')}` }));
-  }
+  const rows = []; // { icons, name, missing }
   if (b.gad) {
     const mine = own ? ids(own.gadgets) : null;
     const has = own ? mine.includes(b.gad[0]) : null;
-    parts.push(icon(b.gad[0], { kind: 'gad', close: !b.gad[3], has, tip: `Gadget: ${I[b.gad[0]]?.n} · ${why(b.gad, 'chose it first')}${ownedNote(has, mine || [], 'gadget')}` }));
+    rows.push({ icons: icon(b.gad[0], { kind: 'gad', close: !b.gad[3], has, tip: `Gadget: ${I[b.gad[0]]?.n} · ${why(b.gad, 'chose it first')}${ownedNote(has, mine || [], 'gadget')}` }), name: I[b.gad[0]]?.n, missing: has === false });
+  }
+  if (b.sp) {
+    const mine = own ? ids(own.starPowers) : null;
+    const has = own ? mine.includes(b.sp[0]) : null;
+    rows.push({ icons: icon(b.sp[0], { kind: 'sp', close: !b.sp[3], has, tip: `Star power: ${I[b.sp[0]]?.n} · ${why(b.sp, 'chose it first')}${ownedNote(has, mine || [], 'star power')}` }), name: I[b.sp[0]]?.n, missing: has === false });
   }
   if (b.gear) {
     const names = b.gear[0].map((g) => I[g]?.n).filter(Boolean).join(' + ');
     const mine = own ? ids(own.gears) : null;
-    for (const g of b.gear[0]) {
+    const icons = b.gear[0].map((g) => {
       const has = own ? mine.includes(g) : null;
-      parts.push(icon(g, { close: !b.gear[3], has, tip: `Gears: ${names} · ${why(b.gear, 'run this pair')}${has === null ? '' : has ? ` · You have ${I[g]?.n}` : ` · You don't have ${I[g]?.n} yet`}` }));
-    }
+      return icon(g, { close: !b.gear[3], has, tip: `Gears: ${names} · ${why(b.gear, 'run this pair')}${has === null ? '' : has ? ` · You have ${I[g]?.n}` : ` · You don't have ${I[g]?.n} yet`}` });
+    }).join('');
+    rows.push({ icons, name: names, gear: true, missing: own ? b.gear[0].some((g) => !mine.includes(g)) : false });
   }
-  const html = parts.filter(Boolean).join('');
-  return html ? `<span class="build${small ? ' sm' : ''}">${html}</span>` : '';
+  if (!rows.some((r) => r.icons)) return '';
+  if (named) {
+    // gadget and star power get their names; gears are recognisable from their icons
+    return `<span class="build named">${rows.filter((r) => r.icons).map((r) => r.gear
+      ? `<span class="bn-row gears">${r.icons}</span>`
+      : `<span class="bn-row${r.missing ? ' miss-row' : ''}">${r.icons}<span class="bn-name">${esc(r.name || '')}</span></span>`).join('')}</span>`;
+  }
+  return `<span class="build${small ? ' sm' : ''}">${rows.map((r) => r.icons).join('')}</span>`;
 }
 const notRanked = (id) => (DATA.notInRanked || []).includes(Number(id));
 const pct = (x) => `${x.toFixed(1)}%`;
@@ -384,7 +394,7 @@ function renderMap(m) {
         ${av(it.r[0], 'sq', true)}
         <button class="bn bname" type="button" data-bpop="${esc(it.r[0])}">${esc(B[it.r[0]]?.n)}</button>
         ${cls(it.r[0])}
-        ${build(it.r[0], false, it.c?.own)}
+        ${build(it.r[0], false, it.c?.own, true)}
         ${notRanked(it.r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
         <span class="wrbig ${(ord === 'score' || ord === 'win' || ord === 'curated') && val(it) >= 55 ? 'hi' : ''}" title="${esc(statTip(it.r))}">${big(it)}<small> ${bigLabel}</small></span>
         ${missing(it)}
@@ -447,7 +457,7 @@ function buildRows(id, own) {
     gears = `<li><span class="bd-ic pair">${pair.map((g) => icon(g, 'gear')).join('')}</span>
       <span class="bd-t"><small>Gears</small><b>${pair.map((g) => esc(I[g]?.n || 'Gear')).join(' + ')}</b><span>${b.gear[3] ? 'The pair most top players run' : 'A common pair; others work too'}</span></span>${own ? (n === 2 ? mine('yes', 'You have both') : n === 1 ? mine('alt', 'You have 1 of 2') : mine('no', 'Not unlocked yet')) : ''}</li>`;
   }
-  return `<ul class="bd">${one(b.sp, 'sp', 'Star power')}${one(b.gad, 'gad', 'Gadget')}${gears}</ul>`;
+  return `<ul class="bd">${one(b.gad, 'gad', 'Gadget')}${one(b.sp, 'sp', 'Star power')}${gears}</ul>`;
 }
 
 // ---------- brawler page (#b-<id>): best maps, modes, build and teammates ----------
