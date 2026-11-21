@@ -52,11 +52,11 @@
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
   </button>
 
-  <div id="acctBox" class="sheet" role="dialog" aria-labelledby="acctTitle" hidden>
+  <div id="acctBox" class="sheet" role="dialog" aria-modal="true" aria-labelledby="acctTitle" aria-describedby="acctHelp" hidden>
     <form id="acctForm" class="sheet-in">
       <h2 id="acctTitle">Your player tag</h2>
-      <p>Find it under your name in your in-game profile. We look up which brawlers you own and how built up they are, to make Curated pick. It's saved on this device only.</p>
-      <input id="tagIn" placeholder="#2PP0Y8LQ" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Player tag" maxlength="14" />
+      <p id="acctHelp">Find it under your name in your in-game profile. We look up which brawlers you own and how built up they are, to make Curated pick. It's saved on this device only.</p>
+      <input id="tagIn" placeholder="#2PP0Y8LQ" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Player tag" aria-describedby="acctMsg" maxlength="14" />
       <p id="acctMsg" class="msg" role="status"></p>
       <div class="row">
         <button class="btn" type="submit">Save</button>

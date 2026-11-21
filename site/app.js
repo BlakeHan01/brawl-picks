@@ -404,7 +404,7 @@ function renderMap(m) {
   mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => setOrder(b.dataset.order)));
   $('#moreOrder').addEventListener('change', (e) => { if (e.target.value) setOrder(e.target.value); });
   $('#linkHere')?.addEventListener('click', openAcct);
-  $('#changeAcct')?.addEventListener('click', (e) => { e.preventDefault(); openAcct(); });
+  $('#changeAcct')?.addEventListener('click', (e) => { e.preventDefault(); openAcct(e); });
   bindView();
 }
 
@@ -453,21 +453,37 @@ function renderAcct() {
   b.innerHTML = PLAYER ? `<span class="dotok"></span>${esc(PLAYER.name)}` : 'Add player tag';
   b.title = PLAYER ? `Linked: ${PLAYER.tag}` : 'Add your player tag for Curated pick';
 }
-function openAcct() {
+// Modal dialog per the WAI-ARIA dialog pattern: focus moves in, Tab stays inside,
+// Escape closes, and focus goes back to what opened it.
+let acctOpener = null;
+function openAcct(e) {
   hideTip();
+  // Safari doesn't focus a tapped button, so take the opener from the click
+  acctOpener = e?.currentTarget instanceof HTMLElement ? e.currentTarget : document.activeElement;
   const d = $('#acctBox');
   $('#tagIn').value = PLAYER?.tag || '';
-  $('#acctMsg').textContent = '';
+  acctMsg('');
   $('#acctRemove').hidden = !PLAYER;
   d.hidden = false;
   $('#tagIn').focus();
 }
-const closeAcct = () => { $('#acctBox').hidden = true; };
+function closeAcct() {
+  $('#acctBox').hidden = true;
+  // the opener may have been re-rendered away; fall back to the header button
+  const back = acctOpener?.isConnected && !acctOpener.closest('[hidden]') ? acctOpener : $('#acctBtn');
+  acctOpener = null;
+  back?.focus();
+}
+// invalid: the message is about what was typed (marks the input for screen readers)
+function acctMsg(text, invalid = false) {
+  $('#acctMsg').textContent = text;
+  const i = $('#tagIn');
+  if (invalid) i.setAttribute('aria-invalid', 'true'); else i.removeAttribute('aria-invalid');
+}
 async function loadPlayer(raw, quiet = false) {
   const tag = normalizeTag(raw);
-  const msg = $('#acctMsg');
-  if (!tag) { msg.textContent = 'That doesn\'t look like a player tag. It\'s under your name in your in-game profile, like #2PP0Y8LQ.'; return false; }
-  if (!quiet) msg.textContent = 'Looking up your brawlers…';
+  if (!tag) { acctMsg('That doesn\'t look like a player tag. It\'s under your name in your in-game profile, like #2PP0Y8LQ.', true); return false; }
+  if (!quiet) acctMsg('Looking up your brawlers…');
   let r, body;
   try {
     r = await fetch(`${API_BASE}/player/${encodeURIComponent('#' + tag)}`, { signal: AbortSignal.timeout(10000) });
@@ -475,9 +491,9 @@ async function loadPlayer(raw, quiet = false) {
   } catch { r = null; }
   if (!r || !r.ok) {
     if (quiet) return false;
-    msg.textContent = r?.status === 404 ? `No player found for #${tag}. Check the tag in your in-game profile.`
+    acctMsg(r?.status === 404 ? `No player found for #${tag}. Check the tag in your in-game profile.`
       : r?.status === 503 ? 'The game API is busy. Try again in a minute.'
-      : 'Player lookup is unavailable right now. Try again later.';
+      : 'Player lookup is unavailable right now. Try again later.', r?.status === 404);
     return false;
   }
   PLAYER = body;
@@ -496,7 +512,17 @@ $('#acctRemove').addEventListener('click', () => {
   if (order === 'curated') { order = 'score'; store.set('order', order); }
   closeAcct(); renderAcct(); route();
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#acctBox').hidden) closeAcct(); });
+document.addEventListener('keydown', (e) => {
+  const d = $('#acctBox');
+  if (d.hidden) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeAcct(); return; }
+  if (e.key !== 'Tab') return;
+  const f = [...d.querySelectorAll('input, button')].filter((x) => !x.hidden && !x.disabled);
+  const first = f[0], last = f[f.length - 1];
+  if (!d.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 
 // ---------- build tooltips (hover, focus, or tap), kept inside the screen ----------
 const tipEl = Object.assign(document.createElement('div'), { className: 'tip', hidden: true });
@@ -594,6 +620,7 @@ function goSearch() {
   q.select();
 }
 document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || !$('#acctBox').hidden) return; // the dialog handles its own keys
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
   if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); goSearch(); }
   else if (e.key === '/' && !typing) { e.preventDefault(); goSearch(); }
