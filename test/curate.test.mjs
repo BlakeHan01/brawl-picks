@@ -20,7 +20,8 @@ test('a close-call star power is not held against the player', () => {
 
 test('curate: score minus build costs; a strong power 11 brawler missing one piece can still lead', () => {
   const rows = [[10, 60, 59, 10, 100, 5], [20, 55, 54, 10, 100, 5], [30, 58, 57, 10, 100, 5], [40, 53, 52, 10, 100, 5], [50, 57, 56, 10, 100, 5]];
-  const P = costsFrom({ pieces: { noHypercharge: { penalty: 2 }, powerLevel: { penalty: 4 } } });
+  const P = costsFrom({ n: 50000, pieces: { noHypercharge: { penalty: 2 }, powerLevel: { penalty: 4 } } });
+  assert.equal(costsFrom({ n: 100, pieces: { powerLevel: { penalty: 0 } } }).powerLevel, PENALTY.powerLevel); // too few games: fallback
   const profile = { brawlers: [
     full(10, { hyperCharges: [] }), // 60 - 2 = 58
     full(20), // 55

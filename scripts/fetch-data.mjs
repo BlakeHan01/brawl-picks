@@ -257,7 +257,7 @@ function add(into, from) {
 // Best duos and trios on one map, from a group with trios (g.c).
 //   win     = the combo's skill-adjusted win rate, pulled toward 50% like single brawlers (K games)
 //   synergy = how much better (points) the combo did than its brawlers' own results add up to
-const MIN_DUO = 20, MIN_TRIO = 12, TOP_COMBOS = 5;
+const MIN_DUO = 40, MIN_TRIO = 30, TOP_COMBOS = 5;
 export function combosFor(g, K) {
   if (!g?.c || !g.n) return null;
   const pS = g.sw / g.n;
@@ -272,7 +272,8 @@ export function combosFor(g, K) {
     const ids = key.split('.').map((x) => ID_BASE + Number(x));
     const ex = wS - gS * pS + (wO - gO * (1 - pS));
     const expected = ids.reduce((s, id) => s + (solo[id] || 0), 0);
-    return { ids, n, win: (0.5 * n + ex + K * 0.5) / (n + K), synergy: ex / n - expected };
+    // synergy is pulled toward 0 like win rates, so a few lucky games can't show a huge "together" bonus
+    return { ids, n, win: (0.5 * n + ex + K * 0.5) / (n + K), synergy: (ex - expected * n) / (n + K) };
   }).filter((r) => r.n >= min).sort((x, y) => y.win - x.win).slice(0, TOP_COMBOS)
     .map((r) => [r.ids, r1(100 * r.win), r.n, r1(100 * r.synergy)]);
   for (const [key, v] of Object.entries(g.c)) {
@@ -414,7 +415,7 @@ async function main() {
     const prior = summarizeBuilds((await Promise.all((await buildFiles()).map((f) => readJSON(join(BUILD_DIR, f))))).filter(Boolean));
     const counts = tallyBuilds(profiles, (await readJSON(bfile)) || blankBuilds(), itemNames);
     const logsByTag = new Map(tags.map((t, i) => [t, logs[i]]));
-    counts.eff = tallyEffects(profiles, logsByTag, prior, counts.eff || blankEffects());
+    counts.eff = tallyEffects(profiles, logsByTag, prior, counts.eff?.v === 2 ? counts.eff : blankEffects());
     pick.forEach((t, i) => { if (profiles[i]) seen[t] = runDate; });
     await writeFile(bfile, JSON.stringify(counts));
     await writeFile(seenFile, JSON.stringify(seen));

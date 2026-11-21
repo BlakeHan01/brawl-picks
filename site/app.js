@@ -432,11 +432,11 @@ function legend(m, hasBans) {
   const ordNow = order === 'banned' && !hasBans ? 'score' : order;
   if (ordNow === 'curated') {
     const c = DATA.costs?.pieces;
-    const measured = c && DATA.costs.n >= 2000;
+    const measured = c && DATA.costs.n >= 20000;
     const fmt = (k, label) => (c?.[k]?.penalty ? `${label} −${c[k].penalty}` : null);
     const list = measured ? [fmt('powerLevel', 'each power level below 11'), fmt('noHypercharge', 'no hypercharge'), fmt('buffieMissing', 'each missing buffie'), fmt('noStarPower', 'no star power'), fmt('otherStarPower', 'other star power'), fmt('noGadget', 'no gadget'), fmt('otherGadget', 'other gadget'), fmt('gearMissing', 'each missing gear')].filter(Boolean) : [];
     return `<b>Curated pick</b> ranks the brawlers you own (power 9+) by our score for this map, minus what each missing piece costs. Build icons in full colour are ones you have; grey ones with a red dot you don't have yet. ${measured
-      ? `The costs are measured from ${DATA.costs.n.toLocaleString()} games of ${DATA.costs.players.toLocaleString()} Legendary+ players, comparing each player's games with and without the piece${list.length ? `: ${list.join(', ')} points` : ''}. Pieces that made no clear difference cost nothing.`
+      ? `The costs are measured from ${DATA.costs.n.toLocaleString()} Ranked games of ${DATA.costs.players.toLocaleString()} Legendary+ players, comparing each player's games with and without the piece${list.length ? `: ${list.join(', ')} points` : ''}. Pieces that made no clear difference cost nothing.`
       : 'Until enough games are measured, the costs are estimates.'}`;
   }
   const skill = `Results are adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won (50% = average).`;

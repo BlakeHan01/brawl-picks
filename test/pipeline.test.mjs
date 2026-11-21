@@ -207,19 +207,21 @@ test('builds: first choice when one is owned, gear pair when two are owned', () 
 
 test('combos: trios recorded for Legendary+ games, pairs derived, synergy vs solo results', () => {
   const items = [];
-  // brawlers 1+2 together win 80%; with 3 (and separately) they're average; opponents fixed
+  // brawlers 1+2 together win 80%; with others they're average; opponents fixed
   for (let i = 0; i < 100; i++) items.push(battle('#P1', i, { trophies: 20, brawlers: [1, 2, 3, 20, 21, 22], win: i % 10 < 8 }));
   for (let i = 0; i < 100; i++) items.push(battle('#P1', 200 + i, { trophies: 20, brawlers: [1, 4, 5, 20, 21, 22], win: i % 2 === 0 }));
   for (let i = 0; i < 100; i++) items.push(battle('#P1', 400 + i, { trophies: 20, brawlers: [2, 4, 6, 20, 21, 22], win: i % 2 === 0 }));
+  for (let i = 0; i < 20; i++) items.push(battle('#P1', 600 + i, { trophies: 20, brawlers: [7, 8, 9, 20, 21, 22], win: true })); // 20 lucky games: below the minimum
   const m = tally([{ items }], ['#P1'], 0).maps['gemGrab|hardrockmine'];
   assert.equal(m.rL.c[[1, 2, 3].map((x) => x - 16000000).join('.')][0], 100); // my side, 100 games (ids stored as offsets)
   assert.equal(m.r.c, undefined); // all-Ranked group doesn't store trios
   const c = combosFor(m.rL, 50);
   const duo12 = c.duos.find((d) => d[0].join() === '1,2');
   assert.ok(duo12 && duo12[2] === 100);
-  assert.ok(duo12[3] > 5, `synergy ${duo12[3]}`); // together much better than their solo results add up to
+  assert.ok(duo12[3] > 2, `synergy ${duo12[3]}`); // together better than their solo results add up to (shrunk)
+  assert.ok(!c.duos.some((d) => d[0].includes(7)), 'combos under 40 games are not listed');
   assert.equal(c.trios[0][0].join(), '1,2,3');
-  assert.ok(c.duos.every((d) => d[2] >= 20));
+  assert.ok(c.duos.every((d) => d[2] >= 40) && c.trios.every((t) => t[2] >= 30));
 });
 
 test('build costs: within-player comparison recovers a known effect', () => {
@@ -238,11 +240,15 @@ test('build costs: within-player comparison recovers a known effect', () => {
     }
     logs.set(tag, { items });
   }
-  const r = solveEffects(tallyEffects(profiles, logs, {}, blankEffects()));
+  const acc = tallyEffects(profiles, logs, {}, blankEffects());
+  const r = solveEffects(acc);
   assert.equal(r.players, 300);
   assert.ok(Math.abs(r.pieces.noHypercharge.effect + 10) < 3, `effect ${r.pieces.noHypercharge.effect}`);
   assert.ok(r.pieces.noHypercharge.penalty > 5);
   assert.equal(r.pieces.noGadget.penalty, 0); // never missing: no evidence, no penalty
+  // trophy games (matched by brawler trophies) are left out of the measurement
+  const trophyOnly = new Map([...logs].map(([t, l]) => [t, { items: l.items.map((it) => ({ battle: { ...it.battle, type: 'ranked' } })) }]));
+  assert.equal(tallyEffects(profiles, trophyOnly, {}, blankEffects()).n, 0);
   assert.deepEqual(featuresFor({ power: 11, starPowers: [5], gadgets: [], gears: [], hyperCharges: [] }, { sp: [6, 70, 100, 1] }, 10), [1, 1, 0, 0, 1, 1, 0, 2]);
 });
 

@@ -44,8 +44,11 @@ export function readiness(own, build = {}, P = PENALTY) {
 }
 
 // Measured costs (data.costs.pieces) -> P. Falls back to PENALTY per piece.
+// Only used once enough Ranked games are measured; until then the fallback estimates apply.
+export const MIN_COST_GAMES = 20000;
 export function costsFrom(costs) {
   const P = { ...PENALTY };
+  if (!(costs?.n >= MIN_COST_GAMES)) return P;
   for (const [k, v] of Object.entries(costs?.pieces || {})) if (k in P && Number.isFinite(v.penalty)) P[k] = v.penalty;
   return P;
 }

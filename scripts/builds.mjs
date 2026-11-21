@@ -77,7 +77,7 @@ export function summarizeBuilds(list) {
 // win-rate points each missing piece costs. Only the sums are stored, so days add up.
 export const EFFECTS = ['powerLevel', 'noHypercharge', 'buffieMissing', 'noStarPower', 'otherStarPower', 'noGadget', 'otherGadget', 'gearMissing'];
 const K = EFFECTS.length;
-export const blankEffects = () => ({ n: 0, players: 0, nz: Array(K).fill(0), xtx: Array(K * K).fill(0), xty: Array(K).fill(0) });
+export const blankEffects = () => ({ v: 2, n: 0, players: 0, nz: Array(K).fill(0), xtx: Array(K * K).fill(0), xty: Array(K).fill(0) });
 
 // own: profile brawler; build: { sp, gad } summary (top choice + clear flag); power: from the battle.
 export function featuresFor(own, build = {}, power = own.power) {
@@ -97,7 +97,10 @@ export function featuresFor(own, build = {}, power = own.power) {
   ];
 }
 
-const GAME_TYPES = new Set(['soloRanked', 'teamRanked', 'ranked']);
+// Ranked games only. In trophy games you're matched by that brawler's trophies, so a less built-up
+// brawler (fewer trophies) faces easier opponents and looks *better*: measured on trophy games,
+// "below power 11" came out +8.5 points. Ranked matches by the player's rank instead.
+const GAME_TYPES = new Set(['soloRanked', 'teamRanked']);
 export function tallyEffects(profiles, logsByTag, builds = {}, acc = blankEffects()) {
   for (const pr of profiles) {
     const log = pr?.tag && logsByTag.get(pr.tag);
@@ -133,7 +136,7 @@ export function tallyEffects(profiles, logsByTag, builds = {}, acc = blankEffect
 }
 
 export function addEffects(into, from) {
-  if (!from) return into;
+  if (!from || from.v !== 2) return into; // older sums included trophy games (biased); skip them
   into.n += from.n; into.players += from.players;
   for (let i = 0; i < K; i++) { into.nz[i] += from.nz[i]; into.xty[i] += from.xty[i]; }
   for (let i = 0; i < K * K; i++) into.xtx[i] += from.xtx[i];
