@@ -496,3 +496,40 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
 /* small "Few games" flag (replaces raw game counts on cards) */
 .few { display: inline-block; font: 700 10.5px var(--f-body); color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-radius: 4px; padding: 1px 6px; }
 .up-gain { font: 700 12.5px var(--f-body); }
+
+/* ---- best build, one row per piece (brawler page) ---- */
+.bd { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.bd li { display: flex; align-items: center; gap: 12px; background: var(--panel); border-radius: 12px; padding: 10px 12px; flex-wrap: wrap; }
+.bd-ic { display: flex; gap: 2px; flex: none; width: 72px; justify-content: center; }
+.bd-ic img { width: 40px; height: 40px; object-fit: contain; }
+.bd-ic.pair img { width: 34px; height: 34px; }
+.bd-t { flex: 1; min-width: 150px; display: grid; gap: 1px; }
+.bd-t small { font: 800 10.5px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.bd-t b { font-size: 15px; }
+.bd-t span { font-size: 12.5px; color: var(--dim); }
+.bd-own { font: 700 11.5px var(--f-body); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.bd-own.yes { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.bd-own.alt { color: var(--dim); background: var(--panel2); }
+.bd-own.no { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+@media (max-width: 480px) { .bd-own { margin-left: 84px; } }
+
+/* ---- top 5 cards: build with names, one line per piece (gadget, star power, gears) ---- */
+.build.named { display: grid; gap: 3px; width: 100%; margin: 6px 0 2px; justify-items: stretch; }
+.bn-row { display: flex; align-items: center; gap: 6px; min-width: 0; background: color-mix(in srgb, var(--bg) 55%, transparent); border-radius: 8px; padding: 2px 6px 2px 2px; }
+.bn-row .bi { width: 24px; height: 24px; flex: none; }
+.bn-row .bi + .bi { margin-left: -4px; }
+.bn-name { font: 600 11.5px/1.2 var(--f-body); color: var(--text); min-width: 0; text-align: left; overflow-wrap: break-word; hyphens: auto; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bn-row.gears { background: transparent; justify-content: center; padding: 0; gap: 4px; }
+.bn-row.gears .bi + .bi { margin-left: 0; }
+.bn-row.miss-row .bn-name { color: var(--dim); }
+@media (max-width: 600px) { .bn-name { font-size: 11px; } .bn-row { padding: 3px 5px 3px 2px; gap: 5px; } }
+/* very narrow phones: 2 cards per row so gadget / star power names fit */
+@media (max-width: 360px) {
+  .top5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .top5 li, .top5 li:nth-child(4) { grid-column: auto; }
+  .top5 li:nth-child(n+3) { margin-top: 10px; }
+  .top5 li:nth-child(5) { grid-column: 1 / -1; justify-self: center; width: calc(50% - 4px); }
+}
+.top5 .build.named { align-self: stretch; }
+.bn-row { width: 100%; box-sizing: border-box; }
+.bn-row.gears { width: auto; justify-self: center; }

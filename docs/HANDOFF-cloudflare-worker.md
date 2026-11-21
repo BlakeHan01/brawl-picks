@@ -1,3 +1,5 @@
+> **History.** This setup is done and the Worker is live; see the README for how things work now.
+
 # Handoff: deploy the Brawl Picks Cloudflare Worker
 
 **Status: done.** Deployed at https://brawl-picks-api.hanyufei2001.workers.dev (see `docs/HANDOFF-worker-deployed.md`). The deployed code is Muse's version from PR #4, now in `worker/`.
