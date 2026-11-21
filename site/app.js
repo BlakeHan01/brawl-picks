@@ -1,4 +1,7 @@
 import { searchMaps, initials } from './search.js';
+import { API_BASE } from './config.js';
+import { modeName, modeColor, isSoloMode } from './modes.js';
+import { curate, normalizeTag } from './curate.js';
 
 const $ = (s) => document.querySelector(s);
 const q = $('#q');
@@ -23,12 +26,16 @@ const store = {
 let rankedOnly = store.get('rankedOnly') === '1';
 // Order on map pages. Rows: [brawlerId, score %, win %, pick %, games, ban %].
 const ORDERS = {
+  curated: { label: 'Curated pick', col: 1, head: 'Also good for you', big: 'score' },
   score: { label: 'Score', col: 1, head: 'Also strong', big: 'score' },
   banned: { label: 'Most banned', col: 5, head: 'Also banned a lot', big: 'banned' },
   win: { label: 'Win rate', col: 2, head: 'Also strong', big: 'win', more: true },
   picked: { label: 'Most picked', col: 3, head: 'Also popular', big: 'picked', more: true },
 };
-let order = ORDERS[store.get('order')] ? store.get('order') : 'score';
+// The player's own brawlers (from the Worker), saved on this device.
+let PLAYER = null;
+try { PLAYER = JSON.parse(store.get('player') || 'null'); } catch {}
+let order = ORDERS[store.get('order')] ? store.get('order') : PLAYER ? 'curated' : 'score';
 const rowsOf = (m) => m.rows || [];
 
 // ---------- time ----------
@@ -47,36 +54,71 @@ function ago(iso) {
 const liveEvent = (id) => ROT.events.find((e) => String(e.id) === String(id) && Date.parse(e.end) > Date.now());
 
 // ---------- load ----------
-async function getJSON(url) {
+async function getJSON(url, timeoutMs = 0) {
   try {
-    const r = await fetch(url, { cache: 'no-cache' });
+    const r = await fetch(url, { cache: 'no-cache', ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}) });
     return r.ok ? await r.json() : null;
   } catch { return null; }
+}
+
+// ---------- live rotation (Worker), falling back to the static file ----------
+let STATIC_ROT = { events: [] };
+function decorate(e) {
+  // Add names, colours and art the Worker doesn't send, from the static file or stats data.
+  const known = STATIC_ROT.events.find((x) => String(x.id) === String(e.id)) || DATA.maps.find((m) => String(m.id) === String(e.id));
+  return {
+    ...e,
+    mode: known?.mode || modeName(e.modeId),
+    modeColor: known?.modeColor || modeColor(e.modeId),
+    solo: isSoloMode(e.modeId),
+    img: known?.img || (e.id ? `https://cdn.brawlify.com/maps/regular/${e.id}.png` : null),
+  };
+}
+async function refreshRotation() {
+  if (!API_BASE) return false;
+  const live = await getJSON(`${API_BASE}/rotation`, 6000);
+  if (!live?.events?.length) return false;
+  ROT = { fetchedAt: live.fetchedAt, live: true, events: live.events.map(decorate) };
+  addRotationMaps();
+  markLive();
+  renderFoot();
+  if (mapView.hidden) renderLive();
+  return true;
+}
+function addRotationMaps() {
+  for (const e of ROT.events) {
+    if (e.id == null || mapsById.has(String(e.id))) continue;
+    const m = { id: String(e.id), name: e.map, mode: e.mode, modeId: e.modeId, modeColor: e.modeColor, img: e.img, solo: !!e.solo, ranked: false, rows: [] };
+    m.ini = initials(m.name);
+    MAPS.push(m);
+    mapsById.set(m.id, m);
+  }
 }
 
 async function load() {
   const [d, r] = await Promise.all([getJSON('data/data.json'), getJSON('data/rotation.json')]);
   if (d) DATA = d;
-  if (r) ROT = r;
+  if (r) { ROT = r; STATIC_ROT = r; }
   if (!d && !r) {
     hint.textContent = 'No data yet. The data job has not run (see README).';
     return;
   }
   MAPS = DATA.maps.map((m) => ({ ...m, id: String(m.id) }));
   const have = new Set(MAPS.map((m) => m.id));
-  for (const e of ROT.events) {
-    if (e.id == null || have.has(String(e.id))) continue;
-    have.add(String(e.id));
-    MAPS.push({ id: String(e.id), name: e.map, mode: e.mode, modeId: e.modeId, modeColor: e.modeColor, img: e.img, solo: !!e.solo, ranked: false, picks: [] });
-  }
   mapsById = new Map(MAPS.map((m) => [m.id, m]));
   for (const m of MAPS) m.ini = initials(m.name);
+  addRotationMaps();
   markLive();
   renderChips();
   renderFoot();
   route();
   if (searchView.hidden === false && matchMedia('(pointer: fine)').matches) q.focus();
   setInterval(tick, 30000);
+  renderAcct();
+  refreshRotation(); // live timers; static file stays if the Worker is unreachable
+  setInterval(refreshRotation, 5 * 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRotation(); });
+  if (PLAYER && Date.now() - Date.parse(PLAYER.fetchedAt || 0) > 15 * 60000) loadPlayer(PLAYER.tag, true);
 }
 
 function markLive() { for (const m of MAPS) m.active = !!liveEvent(m.id); }
@@ -92,7 +134,7 @@ function tick() {
 function renderFoot() {
   const parts = [];
   if (DATA.generatedAt) parts.push(`Stats updated ${esc(new Date(DATA.generatedAt).toLocaleDateString())} from ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked games (${(DATA.battles?.legendary ?? 0).toLocaleString()} Legendary+, ${(DATA.battles?.masters ?? 0).toLocaleString()} Masters+) and ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games over the last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}`);
-  if (ROT.fetchedAt) parts.push(`timers checked ${ago(ROT.fetchedAt)}`);
+  if (ROT.fetchedAt) parts.push(ROT.live ? 'timers live' : `timers checked ${ago(ROT.fetchedAt)}`);
   $('#foot').innerHTML = `${parts.join(' · ')}<br>Images from <a href="https://brawlify.com" rel="noopener">Brawlify</a>. Not affiliated with, endorsed or sponsored by Supercell.`;
 }
 
@@ -234,21 +276,65 @@ function renderMap(m) {
   const hasBans = rows.some((r) => r[5] > 0);
   const ord = order === 'banned' && !hasBans ? 'score' : order; // trophy-game maps have no bans
   const o = ORDERS[ord];
-  const list = [...rows].sort((x, y) => y[o.col] - x[o.col] || y[1] - x[1]).slice(0, 20);
-  const top = list.slice(0, 5);
-  const rest = list.slice(5);
-  const vals = list.map((r) => r[o.col]);
+  const B = DATA.brawlers;
+  // items: { r: row, c?: curated info }. Curated pick: the player's own brawlers, top 10.
+  let items;
+  if (ord === 'curated') {
+    const builds = Object.fromEntries(Object.entries(B).map(([id, b]) => [id, b.b]));
+    items = PLAYER ? curate(rows, PLAYER, builds).slice(0, 10).map((c) => ({ r: c.row, c })) : [];
+  } else {
+    items = [...rows].sort((x, y) => y[o.col] - x[o.col] || y[1] - x[1]).slice(0, 20).map((r) => ({ r }));
+  }
+  const val = (it) => (it.c ? it.c.curated : it.r[o.col]);
+  const top = items.slice(0, 5);
+  const rest = items.slice(5);
+  const vals = items.map(val);
   const hi = Math.max(...vals), lo = Math.min(...vals);
   const bar = (v) => 12 + (88 * (v - lo)) / Math.max(0.1, hi - lo);
-  const B = DATA.brawlers;
-  const big = (r) => pct(r[o.col]);
+  const big = (it) => pct(val(it));
+  const bigLabel = ord === 'curated' ? 'for you' : o.big;
   const sub = (r) => [
     ord !== 'win' ? `${pct(r[2])} win` : null,
     ord !== 'picked' ? `${pct(r[3])} picked` : null,
     hasBans && ord !== 'banned' ? `${pct(r[5])} banned` : null,
   ].filter(Boolean);
+  const missing = (it, small) => (it.c?.missing.length
+    ? `<span class="miss${small ? ' sm' : ''}">${it.c.missing.map((t) => `<span>${esc(t)}</span>`).join('')}</span>`
+    : it.c ? `<span class="miss ok${small ? ' sm' : ''}"><span>Fully built</span></span>` : '');
   const main = Object.entries(ORDERS).filter(([k, v]) => !v.more && (k !== 'banned' || hasBans));
   const more = Object.entries(ORDERS).filter(([, v]) => v.more);
+  let body;
+  if (ord === 'curated' && !PLAYER) {
+    body = `<div class="prompt"><p><b>Curated pick</b> shows your best 5 brawlers for this map: the strongest ones here that you've built up.</p>
+      <button class="btn" id="linkHere">Add your player tag</button></div>`;
+  } else if (ord === 'curated' && !items.length) {
+    body = `<p class="empty">None of your power 9+ brawlers are among the picks for this map yet.</p>`;
+  } else {
+    body = `
+    <ol class="top5">${top.map((it, i) => `
+      <li>
+        <span class="rank">${i + 1}</span>
+        ${av(it.r[0], 'sq')}
+        <span class="bn">${esc(B[it.r[0]]?.n)}</span>
+        ${cls(it.r[0])}
+        ${build(it.r[0])}
+        ${notRanked(it.r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
+        <span class="wrbig ${(ord === 'score' || ord === 'win' || ord === 'curated') && val(it) >= 55 ? 'hi' : ''}">${big(it)}<small> ${bigLabel}</small></span>
+        ${missing(it)}
+        ${sub(it.r).map((t) => `<span class="ur">${t}</span>`).join('')}
+        <span class="ur">${n(it.r[4])} games</span>
+      </li>`).join('')}</ol>
+    <p class="legend">${legend(m, hasBans)}</p>
+    ${rest.length ? `<h2>${o.head} <small>ranks 6–${items.length}</small></h2>
+    <ul class="rest">${rest.map((it, i) => `
+      <li>
+        <span class="rk">${i + 6}</span>
+        ${av(it.r[0], 'sq')}
+        <span class="rn"><b>${esc(B[it.r[0]]?.n)} ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true)}${missing(it, true)}<span>${[...sub(it.r), `${n(it.r[4])} games`].join(' · ')}</span></span>
+        <span class="barwrap"><span class="bar" style="width:${bar(val(it)).toFixed(0)}%"></span></span>
+        <span class="wr">${big(it)}</span>
+      </li>`).join('')}</ul>` : ''}`;
+  }
   mapView.innerHTML = head + `
     ${m.low ? '<p class="warn">Few games on this map so far. Treat these picks as a rough guide.</p>' : ''}
     <div class="orderbar">
@@ -262,41 +348,76 @@ function renderMap(m) {
         </select>
       </label>
     </div>
-    <ol class="top5">${top.map((r, i) => `
-      <li>
-        <span class="rank">${i + 1}</span>
-        ${av(r[0], 'sq')}
-        <span class="bn">${esc(B[r[0]]?.n)}</span>
-        ${cls(r[0])}
-        ${build(r[0])}
-        ${notRanked(r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
-        <span class="wrbig ${(ord === 'score' || ord === 'win') && r[o.col] >= 55 ? 'hi' : ''}">${big(r)}<small> ${o.big}</small></span>
-        ${sub(r).map((t) => `<span class="ur">${t}</span>`).join('')}
-        <span class="ur">${n(r[4])} games</span>
-      </li>`).join('')}</ol>
-    <p class="legend">${legend(m, hasBans)}</p>
-    ${rest.length ? `<h2>${o.head} <small>ranks 6–${list.length}</small></h2>
-    <ul class="rest">${rest.map((r, i) => `
-      <li>
-        <span class="rk">${i + 6}</span>
-        ${av(r[0], 'sq')}
-        <span class="rn"><b>${esc(B[r[0]]?.n)} ${cls(r[0])}${notRanked(r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(r[0], true)}<span>${[...sub(r), `${n(r[4])} games`].join(' · ')}</span></span>
-        <span class="barwrap"><span class="bar" style="width:${bar(r[o.col]).toFixed(0)}%"></span></span>
-        <span class="wr">${big(r)}</span>
-      </li>`).join('')}</ul>` : ''}`;
+    ${ord === 'curated' && PLAYER ? `<p class="for">For <b>${esc(PLAYER.name)}</b> · <a href="#" id="changeAcct">change</a></p>` : ''}
+    ${body}`;
   const setOrder = (k) => { order = k; store.set('order', order); renderMap(m); };
   mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => setOrder(b.dataset.order)));
   $('#moreOrder').addEventListener('change', (e) => { if (e.target.value) setOrder(e.target.value); });
+  $('#linkHere')?.addEventListener('click', openAcct);
+  $('#changeAcct')?.addEventListener('click', (e) => { e.preventDefault(); openAcct(); });
 }
 
 function legend(m, hasBans) {
   const ordNow = order === 'banned' && !hasBans ? 'score' : order;
+  if (ordNow === 'curated') return `<b>Curated pick</b> ranks the brawlers you own (power 9+) by our score for this map, minus points for anything missing from your build: power level, the star power and gadget skilled players pick, gears, hypercharge and buffies. A fully built brawler can beat a slightly stronger one you haven't built.`;
   const skill = `Results are adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won (50% = average).`;
   if (ordNow === 'banned') return `<b>Most banned</b> orders brawlers by how often good players ban them on this map: the ones they least want to face, and the ones you're least likely to get. ${skill}`;
   if (ordNow === 'score') return `<b>Score</b> is our best guess at each brawler's win rate here. It starts from how often good players pick${hasBans ? ' or ban' : ''} it on this map and moves toward its actual results as games add up, with weights fitted from the data. ${skill}`;
   if (ordNow === 'win') return `<b>Win rate</b> uses results only: few games are pulled toward 50% so luck can't put a brawler on top. ${skill}`;
   return `<b>Most picked</b> orders brawlers by how often these players chose them here. Popular brawlers are safe meta picks, but they don't always win the most. ${skill}`;
 }
+
+// ---------- account (player tag -> Worker -> the player's brawlers) ----------
+function renderAcct() {
+  const b = $('#acctBtn');
+  b.hidden = !API_BASE;
+  b.innerHTML = PLAYER ? `<span class="dotok"></span>${esc(PLAYER.name)}` : 'Add player tag';
+  b.title = PLAYER ? `Linked: ${PLAYER.tag}` : 'Add your player tag for Curated pick';
+}
+function openAcct() {
+  hideTip();
+  const d = $('#acctBox');
+  $('#tagIn').value = PLAYER?.tag || '';
+  $('#acctMsg').textContent = '';
+  $('#acctRemove').hidden = !PLAYER;
+  d.hidden = false;
+  $('#tagIn').focus();
+}
+const closeAcct = () => { $('#acctBox').hidden = true; };
+async function loadPlayer(raw, quiet = false) {
+  const tag = normalizeTag(raw);
+  const msg = $('#acctMsg');
+  if (!tag) { msg.textContent = 'That doesn\'t look like a player tag. It\'s under your name in your in-game profile, like #2PP0Y8LQ.'; return false; }
+  if (!quiet) msg.textContent = 'Looking up your brawlers…';
+  let r, body;
+  try {
+    r = await fetch(`${API_BASE}/player/${encodeURIComponent('#' + tag)}`, { signal: AbortSignal.timeout(10000) });
+    body = await r.json().catch(() => ({}));
+  } catch { r = null; }
+  if (!r || !r.ok) {
+    if (quiet) return false;
+    msg.textContent = r?.status === 404 ? `No player found for #${tag}. Check the tag in your in-game profile.`
+      : r?.status === 503 ? 'The game API is busy. Try again in a minute.'
+      : 'Player lookup is unavailable right now. Try again later.';
+    return false;
+  }
+  PLAYER = body;
+  store.set('player', JSON.stringify(PLAYER));
+  if (!quiet) { order = 'curated'; store.set('order', order); closeAcct(); }
+  renderAcct();
+  route();
+  return true;
+}
+$('#acctBtn').addEventListener('click', openAcct);
+$('#acctForm').addEventListener('submit', (e) => { e.preventDefault(); loadPlayer($('#tagIn').value); });
+$('#acctCancel').addEventListener('click', closeAcct);
+$('#acctRemove').addEventListener('click', () => {
+  PLAYER = null;
+  store.set('player', '');
+  if (order === 'curated') { order = 'score'; store.set('order', order); }
+  closeAcct(); renderAcct(); route();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#acctBox').hidden) closeAcct(); });
 
 // ---------- build tooltips (hover, focus, or tap), kept inside the screen ----------
 const tipEl = Object.assign(document.createElement('div'), { className: 'tip', hidden: true });

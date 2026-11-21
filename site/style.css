@@ -160,7 +160,7 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .nr { font: 800 9.5px var(--f-body); text-transform: uppercase; letter-spacing: .04em; color: var(--warn); background: var(--panel2); border-radius: 4px; padding: 1px 5px; white-space: nowrap; vertical-align: middle; }
 .wrbig { font: 700 18px var(--f-num); margin-top: 2px; }
 .wrbig.hi { color: var(--good); }
-.wrbig small { font: 600 10px var(--f-body); color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+.wrbig small { white-space: nowrap; font: 600 10px var(--f-body); color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
 .ur { font: 11px var(--f-num); color: var(--dim); }
 
 .legend { font-size: 12px; color: var(--dim); margin: 10px 0 0; }
@@ -234,3 +234,30 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size:
 .tipbox p { margin: 0; font-size: 13.5px; line-height: 1.4; }
 .tipbox kbd { font: 700 12px var(--f-num); border: 1px solid currentColor; border-radius: 5px; padding: 0 5px; }
 .btn { border: 0; border-radius: 9px; padding: 7px 14px; font-weight: 800; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+
+/* account */
+.acct { display: inline-flex; align-items: center; gap: 7px; border: 2px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 6px 13px; font: 700 13px var(--f-body); cursor: pointer; max-width: 55vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct:hover { border-color: var(--accent); }
+.acct[hidden] { display: none; }
+.dotok { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; }
+.sheet { position: fixed; inset: 0; z-index: 60; background: rgba(8, 6, 14, .65); display: grid; place-items: center; padding: 16px; }
+.sheet[hidden] { display: none; }
+.sheet-in { width: min(420px, 100%); background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.sheet-in h2 { margin: 0; font: 400 24px var(--f-display); color: var(--text); text-transform: none; letter-spacing: 0; }
+.sheet-in p { margin: 0; color: var(--dim); font-size: 13.5px; }
+.sheet-in input { padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--text); font: 600 17px var(--f-num); text-transform: uppercase; outline: none; }
+.sheet-in input:focus { border-color: var(--accent); }
+.sheet-in .msg { color: var(--warn); min-height: 1.2em; }
+.sheet-in .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn.ghost { background: var(--panel2); color: var(--text); }
+.btn.danger { color: #ff8a8a; margin-left: auto; }
+.btn[hidden] { display: none; }
+/* curated pick */
+.prompt { margin-top: 16px; background: var(--panel); border: 2px dashed var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.prompt p { margin: 0; color: var(--dim); }
+.for { margin: 10px 0 0; color: var(--dim); font-size: 13px; }
+.for a { color: var(--accent); }
+.miss { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin: 4px 0 2px; }
+.miss span { font: 700 10px var(--f-body); color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-radius: 4px; padding: 1px 5px; }
+.miss.ok span { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.miss.sm { justify-content: flex-start; margin: 2px 0; }

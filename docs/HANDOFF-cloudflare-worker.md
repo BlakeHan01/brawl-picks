@@ -1,6 +1,8 @@
 # Handoff: deploy the Brawl Picks Cloudflare Worker
 
-**For:** Muse (setup and deploy only). **Code, tests and site integration:** Claude, already done in `worker/`.
+**Status: done.** Deployed at https://brawl-picks-api.hanyufei2001.workers.dev (see `docs/HANDOFF-worker-deployed.md`). The deployed code is Muse's version from PR #4, now in `worker/`.
+
+**For:** Muse (setup and deploy only). **Site integration:** Claude.
 
 ## What it is (no action needed)
 
