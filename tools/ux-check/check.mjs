@@ -222,6 +222,17 @@ async function dialogPattern(p, label, openSel, dialogSel) {
     check('Brawler page shows your power and what\'s missing', /Yours: power|don't have/.test(await p.textContent('#mapView')));
     await audit(p, 'Brawler page (linked)');
 
+    // ===== 5b. Curated pick: "Fully built only" switch =====
+    await p.goto(BASE + `#m-${rankedMap.id}`); await p.evaluate(() => localStorage.setItem('order', 'curated')); await p.reload(); await settle(p, 900);
+    await p.click('#fullOnly'); await settle(p, 250);
+    const fb = await p.evaluate(() => ({ on: document.querySelector('#fullOnly').getAttribute('aria-checked'), role: document.querySelector('#fullOnly').getAttribute('role'), bad: document.querySelectorAll('.top5 .miss:not(.ok), .rest .miss:not(.ok), .top5 .bi.missing, .rest .bi.missing').length, n: document.querySelectorAll('.top5 li, .rest li').length, empty: !!document.querySelector('#mapView .empty') }));
+    check('"Fully built only" is a switch and turns on', fb.role === 'switch' && fb.on === 'true');
+    check('…shows only brawlers with nothing missing (or says none rank here)', fb.bad === 0 && (fb.n > 0 || fb.empty), `${fb.n} cards, ${fb.bad} with something missing`);
+    await audit(p, 'Curated pick, fully built only');
+    await p.reload(); await settle(p, 700);
+    check('…and is remembered after a reload', (await p.getAttribute('#fullOnly', 'aria-checked')) === 'true');
+    await p.click('#fullOnly'); await settle(p, 200);
+
     // ===== 6. 320px phone =====
     for (const [label, url] of [['Home', ''], ['Map page', `#m-${rankedMap.id}`], ['Upgrades', '#upgrades'], ['Brawler page', `#b-${Object.keys(DATA.brawlers)[0]}`]]) {
       const q = await newPage(b, { viewport: { width: 320, height: 760 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, { player: true, wallet: { c: 30000, p: 12000 } }); pages.push(q);

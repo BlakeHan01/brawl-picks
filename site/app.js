@@ -42,6 +42,7 @@ try { PLAYER = JSON.parse(store.get('player') || 'null'); } catch {}
 let order = ORDERS[store.get('order')] ? store.get('order') : PLAYER ? 'curated' : 'score';
 // Map page view: single brawlers or best duos/trios.
 let view = store.get('view') === 'combos' ? 'combos' : 'brawlers';
+let fullOnly = store.get('fullOnly') === '1'; // Curated pick: fully built brawlers only
 const rowsOf = (m) => m.rows || [];
 
 // ---------- time ----------
@@ -266,32 +267,36 @@ function build(id, small = false, own = null, named = false) {
     const state = has === null ? '' : has ? ' have' : ' missing';
     return `<span class="bi${kind ? ` ${kind}` : ''}${close ? ' close' : ''}${state}" tabindex="0" role="img" aria-label="${esc(tip)}" data-tip="${esc(tip)}"><img src="${esc(it.img)}" alt="" loading="lazy"></span>`;
   };
-  const ownedNote = (has, otherIds, label) => {
+  let closeNote = '';
+  const ownedNote = (has, otherIds, label, topId, clear) => {
     if (has === null) return '';
-    if (has) return ' · You have it';
+    closeNote = clear ? '' : ' (either is fine)';
+    if (otherIds.includes(topId)) return ' · You have it';
     if (!otherIds.length) return ` · You don't have a ${label} yet`;
     const other = otherIds.map((x) => I[x]?.n).filter(Boolean);
-    return other.length ? ` · You have ${other.join(', ')} instead` : ` · You have the other ${label} instead`;
+    return other.length ? ` · You have ${other.join(', ')} instead${closeNote}` : ` · You have the other ${label} instead${closeNote}`;
   };
   const rows = []; // { icons, name, missing }
+  // A close call (skilled players split) is fine whichever one you own: no red dot then.
   if (b.gad) {
     const mine = own ? ids(own.gadgets) : null;
-    const has = own ? mine.includes(b.gad[0]) : null;
-    rows.push({ icons: icon(b.gad[0], { kind: 'gad', close: !b.gad[3], has, tip: `Gadget: ${I[b.gad[0]]?.n} · ${why(b.gad, 'chose it first')}${ownedNote(has, mine || [], 'gadget')}` }), name: I[b.gad[0]]?.n, missing: has === false });
+    const has = own ? mine.includes(b.gad[0]) || (!b.gad[3] && mine.length > 0) : null;
+    rows.push({ icons: icon(b.gad[0], { kind: 'gad', close: !b.gad[3], has, tip: `Gadget: ${I[b.gad[0]]?.n} · ${why(b.gad, 'chose it first')}${ownedNote(has, mine || [], 'gadget', b.gad[0], b.gad[3])}` }), name: I[b.gad[0]]?.n, missing: has === false });
   }
   if (b.sp) {
     const mine = own ? ids(own.starPowers) : null;
-    const has = own ? mine.includes(b.sp[0]) : null;
-    rows.push({ icons: icon(b.sp[0], { kind: 'sp', close: !b.sp[3], has, tip: `Star power: ${I[b.sp[0]]?.n} · ${why(b.sp, 'chose it first')}${ownedNote(has, mine || [], 'star power')}` }), name: I[b.sp[0]]?.n, missing: has === false });
+    const has = own ? mine.includes(b.sp[0]) || (!b.sp[3] && mine.length > 0) : null;
+    rows.push({ icons: icon(b.sp[0], { kind: 'sp', close: !b.sp[3], has, tip: `Star power: ${I[b.sp[0]]?.n} · ${why(b.sp, 'chose it first')}${ownedNote(has, mine || [], 'star power', b.sp[0], b.sp[3])}` }), name: I[b.sp[0]]?.n, missing: has === false });
   }
   if (b.gear) {
     const names = b.gear[0].map((g) => I[g]?.n).filter(Boolean).join(' + ');
     const mine = own ? ids(own.gears) : null;
+    const anyPairOk = own && !b.gear[3] && mine.length >= 2; // close call: any two gears are fine
     const icons = b.gear[0].map((g) => {
-      const has = own ? mine.includes(g) : null;
-      return icon(g, { close: !b.gear[3], has, tip: `Gears: ${names} · ${why(b.gear, 'run this pair')}${has === null ? '' : has ? ` · You have ${I[g]?.n}` : ` · You don't have ${I[g]?.n} yet`}` });
+      const has = own ? mine.includes(g) || anyPairOk : null;
+      return icon(g, { close: !b.gear[3], has, tip: `Gears: ${names} · ${why(b.gear, 'run this pair')}${has === null ? '' : mine.includes(g) ? ` · You have ${I[g]?.n}` : anyPairOk ? ' · Your other gears are fine too' : ` · You don't have ${I[g]?.n} yet`}` });
     }).join('');
-    rows.push({ icons, name: names, gear: true, missing: own ? b.gear[0].some((g) => !mine.includes(g)) : false });
+    rows.push({ icons, name: names, gear: true, missing: own ? !anyPairOk && b.gear[0].some((g) => !mine.includes(g)) : false });
   }
   if (!rows.some((r) => r.icons)) return '';
   if (named) {
@@ -352,7 +357,9 @@ function renderMap(m) {
   let items;
   if (ord === 'curated') {
     const builds = Object.fromEntries(Object.entries(B).map(([id, b]) => [id, b.b]));
-    items = PLAYER ? curate(rows, me(), builds, costsFrom(DATA.costs)).slice(0, 10).map((c) => ({ r: c.row, c })) : [];
+    // "Fully built only": just the brawlers with nothing missing (power 11, top gadget / star power,
+    // both gears, hypercharge, all buffies where the brawler has them)
+    items = PLAYER ? curate(rows, me(), builds, costsFrom(DATA.costs)).filter((c) => !fullOnly || !c.missing.length).slice(0, 10).map((c) => ({ r: c.row, c })) : [];
   } else {
     items = [...rows].sort((x, y) => y[o.col] - x[o.col] || y[1] - x[1]).slice(0, 20).map((r) => ({ r }));
   }
@@ -386,7 +393,9 @@ function renderMap(m) {
     body = `<div class="prompt"><p><b>Curated pick</b> shows your best 5 brawlers for this map: the strongest ones here that you've built up.</p>
       <button class="btn" id="linkHere">Add your player tag</button></div>`;
   } else if (ord === 'curated' && !items.length) {
-    body = `<p class="empty">None of your power 9+ brawlers are among the picks for this map yet.</p>`;
+    body = fullOnly
+      ? `<p class="empty">None of your fully built brawlers rank on this map. Turn off "Fully built only" to see the rest.</p>`
+      : `<p class="empty">None of your power 9+ brawlers are among the picks for this map yet.</p>`;
   } else {
     body = `
     <ol class="top5">${top.map((it, i) => `
@@ -427,13 +436,15 @@ function renderMap(m) {
         </select>
       </label>
     </div>
-    ${ord === 'curated' && PLAYER ? `<p class="for">For <b>${esc(PLAYER.name)}</b> · <a href="#" id="changeAcct">change</a></p>` : ''}
+    ${ord === 'curated' && PLAYER ? `<div class="forbar"><p class="for">For <b>${esc(PLAYER.name)}</b> · <a href="#" id="changeAcct">change</a></p>
+      <button type="button" class="switch" id="fullOnly" role="switch" aria-checked="${fullOnly}"><span class="knob" aria-hidden="true"></span>Fully built only</button></div>` : ''}
     ${body}`;
   const setOrder = (k) => { order = k; store.set('order', order); renderMap(m); };
   mapView.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => setOrder(b.dataset.order)));
   $('#moreOrder').addEventListener('change', (e) => { if (e.target.value) setOrder(e.target.value); });
   $('#linkHere')?.addEventListener('click', openAcct);
   $('#changeAcct')?.addEventListener('click', (e) => { e.preventDefault(); openAcct(e); });
+  $('#fullOnly')?.addEventListener('click', () => { fullOnly = !fullOnly; store.set('fullOnly', fullOnly ? '1' : '0'); renderMap(m); $('#fullOnly')?.focus(); });
   bindView();
 }
 
@@ -455,8 +466,9 @@ function buildRows(id, own) {
   if (b.gear) {
     const pair = b.gear[0], have = own ? ids(own.gears) : [];
     const n = pair.filter((g) => have.includes(g)).length;
+    const okOther = !b.gear[3] && have.length >= 2; // close call: any two gears are fine
     gears = `<li><span class="bd-ic pair">${pair.map((g) => icon(g, 'gear')).join('')}</span>
-      <span class="bd-t"><small>Gears</small><b>${pair.map((g) => esc(I[g]?.n || 'Gear')).join(' + ')}</b><span>${b.gear[3] ? 'The pair most top players run' : 'A common pair; others work too'}</span></span>${own ? (n === 2 ? mine('yes', 'You have both') : n === 1 ? mine('alt', 'You have 1 of 2') : mine('no', 'Not unlocked yet')) : ''}</li>`;
+      <span class="bd-t"><small>Gears</small><b>${pair.map((g) => esc(I[g]?.n || 'Gear')).join(' + ')}</b><span>${b.gear[3] ? 'The pair most top players run' : 'A common pair; others work too'}</span></span>${own ? (n === 2 ? mine('yes', 'You have both') : okOther ? mine('yes', 'Your gears are fine') : n === 1 ? mine('alt', 'You have 1 of 2') : mine('no', 'Not unlocked yet')) : ''}</li>`;
   }
   return `<ul class="bd">${one(b.gad, 'gad', 'Gadget')}${one(b.sp, 'sp', 'Star power')}${gears}</ul>`;
 }

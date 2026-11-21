@@ -84,3 +84,8 @@ test('claw machine: expected pulls per wanted buffie (random order, no duplicate
   for (const p of perm([...Array(R).keys()].slice(0, 7))) { sum += p.findIndex((x) => x < m) + 1; n++; } // 7 items, 3 wanted
   assert.ok(Math.abs(sum / n - (7 + 1) / (3 + 1)) < 1e-9);
 });
+
+test('upgrades suggest the top gear when two other gears are owned', () => {
+  const own = { id: 1, power: 11, starPowers: [1], gadgets: [2], gears: [3, 4], hyperCharges: [5] };
+  assert.deepEqual(upgradeSteps(own, { gear: [[3, 9], 60, 100, 1] }, { 9: 'Shield' }).map((x) => [x.kind, x.label]), [['gear', 'Shield']]);
+});
