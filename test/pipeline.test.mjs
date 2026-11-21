@@ -326,7 +326,7 @@ test('end to end: stats + rotation from the mock API', async () => {
   assert.equal(d.brawlers[16000000].n, 'El Primo');
   assert.equal(d.brawlers[16000001].n, 'R-T');
   assert.equal(d.brawlers[16000000].c, 'Tank'); // from the Brawlify mock
-  assert.equal(d.brawlers[16000001].c, ''); // "Unknown" is ignored
+  assert.equal(d.brawlers[16000001].c, 'Damage Dealer'); // Brawlify's "Unknown" is ignored; the seed list fills the gap
   assert.equal(d.brawlers[16000002].c, 'Support'); // from the saved file
   assert.equal(JSON.parse(await readFile(classFile, 'utf8')).classes[16000000], 'Tank');
   const bz = d.maps.find((m) => m.name === 'Below Zero');
