@@ -117,6 +117,7 @@ async function load() {
   markLive();
   renderChips();
   renderFoot();
+  trackNav();
   route();
   if (searchView.hidden === false && matchMedia('(pointer: fine)').matches) q.focus();
   setInterval(tick, 30000);
@@ -307,7 +308,7 @@ function renderMap(m) {
   const e = liveEvent(m.id);
   const rows = rowsOf(m);
   const head = `
-    <a class="back" href="#">← All maps</a>
+    ${backLink()}
     <div class="maphead" style="--mc:${esc(m.modeColor || '#888')}">
       ${m.img ? `<img class="mapimg" src="${esc(m.img)}" alt="">` : ''}
       <div>
@@ -379,7 +380,7 @@ function renderMap(m) {
       <li>
         <span class="rank">${i + 1}</span>
         ${av(it.r[0], 'sq')}
-        <span class="bn">${esc(B[it.r[0]]?.n)}</span>
+        <button class="bn bname" type="button" data-bpop="${esc(it.r[0])}">${esc(B[it.r[0]]?.n)}</button>
         ${cls(it.r[0])}
         ${build(it.r[0], false, it.c?.own)}
         ${notRanked(it.r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
@@ -394,7 +395,7 @@ function renderMap(m) {
       <li>
         <span class="rk">${i + 6}</span>
         ${av(it.r[0], 'sq')}
-        <span class="rn"><b>${esc(B[it.r[0]]?.n)} ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true, it.c?.own)}${missing(it, true)}<span title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}${banChip(it.r)}</span></span>
+        <span class="rn"><b><button class="bname" type="button" data-bpop="${esc(it.r[0])}">${esc(B[it.r[0]]?.n)}</button> ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true, it.c?.own)}${missing(it, true)}<span title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}${banChip(it.r)}</span></span>
         <span class="barwrap"><span class="bar" style="width:${bar(val(it)).toFixed(0)}%"></span></span>
         <span class="wr">${big(it)}</span>
       </li>`).join('')}</ul>` : ''}`;
@@ -458,29 +459,78 @@ function brawlerStats(id) {
   bstatsCache.by[id] = out;
   return out;
 }
+// "Yours: power 10 · missing ..." for the linked player (empty without a tag).
+function yoursLine(id) {
+  if (!PLAYER) return '';
+  const b = DATA.brawlers[id], own = me()?.brawlers.find((x) => Number(x.id) === Number(id));
+  if (!own) return `<p class="bp-you">You don't have ${esc(b.n)} yet.</p>`;
+  const r = readiness(own, b.b, costsFrom(DATA.costs));
+  return `<p class="bp-you"><span class="dotok"></span>Yours: power ${own.power}${r.missing.length ? ` · <span class="miss sm">${r.missing.map((t) => `<span>${esc(t)}</span>`).join('')}</span> <a href="#upgrades">Upgrade</a>` : ' · <span class="miss ok sm"><span>Fully built</span></span>'}</p>`;
+}
+const statTiles = (st) => {
+  const tile = (v, label) => `<div class="bp-tile"><b class="num">${v == null ? '–' : pct(v)}</b><span>${label}</span></div>`;
+  return `<div class="bp-tiles" title="Legendary+ Ranked games, last ${DATA.window?.days ?? 14} days">${tile(st.win, 'Win')}${tile(st.pick, 'Picked')}${tile(st.ban, 'Banned')}</div>`;
+};
+
+// ---------- brawler card: tap a brawler's name anywhere for a quick look (modal dialog) ----------
+let popOpener = null, popId = null;
+function openPop(id, e) {
+  const b = DATA.brawlers[id];
+  if (!b) return;
+  hideTip();
+  popOpener = e?.target?.closest?.('[data-bpop]') || (document.activeElement !== document.body ? document.activeElement : null);
+  popId = String(id);
+  const st = brawlerStats(id), own = me()?.brawlers.find((x) => Number(x.id) === Number(id));
+  const top = st.maps.filter((x) => x.m.ranked).slice(0, 3);
+  $('#bpopIn').innerHTML = `
+    <div class="bpop-head">
+      ${av(id, 'sq bp-av')}
+      <div><h2 id="bpopTitle">${esc(b.n)}</h2><p class="bp-cls">${cls(id)}${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}</p></div>
+      <button class="bpop-x" type="button" aria-label="Close">✕</button>
+    </div>
+    ${statTiles(st)}
+    ${b.b ? `<div class="bp-build">${build(id, false, own || null)}</div>` : ''}
+    ${yoursLine(id)}
+    ${top.length ? `<h3 class="bpop-h">Best Ranked maps</h3><ol class="bp-maps sm">${top.map((x) => `<li><a href="#m-${esc(x.m.id)}" data-frompop>
+        <span class="dot" style="--mc:${esc(x.m.modeColor || '#888')}"></span>
+        <span class="name"><span class="nt">${esc(x.m.name)}</span><small class="mline">${esc(x.m.mode)}</small></span>
+        <span class="bp-rk num">#${x.rank}<small>/${x.of}</small></span><span class="bp-wr num">${pct(x.row[2])}</span></a></li>`).join('')}</ol>` : ''}
+    <a class="btn bpop-more" href="#b-${esc(id)}">Full page →</a>`;
+  $('#bpop').hidden = false;
+  $('#bpopIn .bpop-x').focus();
+}
+function hidePop(restoreFocus = false) {
+  const d = $('#bpop');
+  if (d.hidden) return;
+  d.hidden = true;
+  popId = null;
+  if (restoreFocus && popOpener?.isConnected) popOpener.focus();
+  popOpener = null;
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest?.('[data-bpop]');
+  if (t) { e.preventDefault(); openPop(t.dataset.bpop, e); return; }
+  if (e.target.closest?.('.bpop-x')) { hidePop(true); return; }
+  // tapping a map in the card: remember the card so "back" reopens it
+  if (e.target.closest?.('[data-frompop]') && nav.length && popId) { nav[nav.length - 1].pop = popId; saveNav(); }
+  // tap outside the panel closes a dialog
+  if (e.target.id === 'bpop') hidePop(true);
+  if (e.target.id === 'acctBox') closeAcct();
+});
+
 let bShowAll = false;
 function renderBrawler(id) {
   const b = DATA.brawlers[id], st = brawlerStats(id);
   const own = me()?.brawlers.find((x) => Number(x.id) === Number(id));
-  const tile = (v, label, f = pct) => `<div class="bp-tile"><b class="num">${v == null ? '–' : f(v)}</b><span>${label}</span></div>`;
   const list = bShowAll ? st.maps : st.maps.slice(0, 8);
-  let you = '';
-  if (PLAYER) {
-    if (!own) you = `<p class="bp-you">You don't have ${esc(b.n)} yet.</p>`;
-    else {
-      const r = readiness(own, b.b, costsFrom(DATA.costs));
-      you = `<p class="bp-you"><span class="dotok"></span>Yours: power ${own.power}${r.missing.length ? ` · <span class="miss sm">${r.missing.map((t) => `<span>${esc(t)}</span>`).join('')}</span> <a href="#upgrades">Upgrade</a>` : ' · <span class="miss ok sm"><span>Fully built</span></span>'}</p>`;
-    }
-  }
+  const you = yoursLine(id);
   mapView.innerHTML = `
-    <a class="back" href="#">← All maps</a>
+    ${backLink()}
     <div class="bp-head">
       ${av(id, 'sq bp-av')}
       <div><h1>${esc(b.n)}</h1><p class="bp-cls">${cls(id)}${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}</p></div>
     </div>
-    <div class="bp-tiles" title="Legendary+ Ranked games, last ${DATA.window?.days ?? 14} days">
-      ${tile(st.win, 'Win')}${tile(st.pick, 'Picked')}${tile(st.ban, 'Banned')}
-    </div>
+    ${statTiles(st)}
     ${b.b ? `<h2>Best build</h2><div class="bp-build">${build(id, false, own || null)}</div>` : ''}
     ${you}
     ${st.modes.length ? `<h2>Best modes</h2><ul class="bp-modes">${st.modes.map((k) => `<li style="--mc:${esc(k.color || '#888')}"><span class="d"></span>${esc(k.mode)} <b class="num">${pct(k.win)}</b></li>`).join('')}</ul>` : ''}
@@ -506,7 +556,7 @@ function renderCombos(m) {
       <li>
         <span class="rk">${i + 1}</span>
         <span class="cav">${ids.map((id) => av(id, 'sq')).join('')}</span>
-        <span class="cn"><b>${ids.map((id) => esc(B[id]?.n)).join(' + ')}</b>
+        <span class="cn"><b>${ids.map((id) => `<button class="bname" type="button" data-bpop="${esc(id)}">${esc(B[id]?.n)}</button>`).join(' + ')}</b>
           <span>${n(games)} games${syn ? ` · <i class="${syn > 0 ? 'up' : 'down'}">${syn > 0 ? '+' : ''}${syn.toFixed(1)} together</i>` : ''}${mine(ids) ? ' · <i class="up">you have these</i>' : ''}</span></span>
         <span class="wr ${win >= 55 ? 'hi' : ''}">${pct(win)}</span>
       </li>`).join('')}</ol>`;
@@ -582,6 +632,8 @@ function upWhy(id, chain, from, to, maps) {
   if (to > from && big) out.push(`Biggest jump: ${esc(big.kind === 'power' || big.kind === 'hypercharge' || big.kind === 'buffie' ? big.label : `${KIND[big.kind]} ${big.label}`)}.`);
   return out.join(' ');
 }
+const upOpen = new Set(); // brawler ids whose map list is open (kept when coming back)
+document.addEventListener('toggle', (e) => { const d = e.target; if (d.matches?.('details.up-maps[data-id]')) d.open ? upOpen.add(d.dataset.id) : upOpen.delete(d.dataset.id); }, true);
 function upCard(p, rank, maxGain, U) {
   const chain = U.chains[p.id], b = DATA.brawlers[p.id] || { n: '?' };
   const own = PLAYER.brawlers.find((x) => Number(x.id) === Number(p.id));
@@ -591,13 +643,13 @@ function upCard(p, rank, maxGain, U) {
     ${av(p.id, 'sq up-av')}
     <div class="up-main">
       <div class="up-head">
-        <h3 class="up-name">${esc(b.n)} <span class="up-now">${cls(p.id)} power ${own?.power ?? '?'} now</span></h3>
+        <h3 class="up-name"><button class="bname" type="button" data-bpop="${esc(p.id)}">${esc(b.n)}</button> <span class="up-now">${cls(p.id)} power ${own?.power ?? '?'} now</span></h3>
         <p class="up-cost">${p.pp ? `<span class="pp">${n(p.pp)}<span class="sr"> power points</span></span>` : ''}<span class="coin">${n(p.coins)}<span class="sr"> coins</span></span></p>
       </div>
       ${upSteps(chain, p.from, p.to)}
       <p class="up-why">${upWhy(p.id, chain, p.from, p.to, U.maps)}</p>
       <div class="up-impact"><span class="up-bar" aria-hidden="true"><i style="width:${Math.max(4, (100 * p.gain) / maxGain).toFixed(0)}%"></i></span><span class="up-gain" title="How much this raises your average top-3 pick across Ranked maps">+${p.gain.toFixed(2)} pts</span></div>
-      ${top.length ? `<details class="up-maps"><summary>Maps where it's in your top 3</summary><ul>${top.map(([mi, r]) => { const m = U.maps[mi]; return `<li><a href="#m-${esc(m.id)}"><span class="dot" style="background:${esc(m.modeColor || '#888')}"></span><span class="mn">${esc(m.name)}</span><span class="r">#${r} for you</span></a></li>`; }).join('')}</ul></details>` : ''}
+      ${top.length ? `<details class="up-maps" data-id="${esc(p.id)}"${upOpen.has(String(p.id)) ? ' open' : ''}><summary>Maps where it's in your top 3</summary><ul>${top.map(([mi, r]) => { const m = U.maps[mi]; return `<li><a href="#m-${esc(m.id)}"><span class="dot" style="background:${esc(m.modeColor || '#888')}"></span><span class="mn">${esc(m.name)}</span><span class="r">#${r} for you</span></a></li>`; }).join('')}</ul></details>` : ''}
     </div>
   </li>`;
 }
@@ -742,12 +794,14 @@ $('#acctRemove').addEventListener('click', () => {
   if (order === 'curated') { order = 'score'; store.set('order', order); }
   closeAcct(); renderAcct(); route();
 });
+// Which modal dialog is open, if any (account box first: it can open over the brawler card).
+const openModal = () => (!$('#acctBox').hidden ? $('#acctBox') : !$('#bpop').hidden ? $('#bpop') : null);
 document.addEventListener('keydown', (e) => {
-  const d = $('#acctBox');
-  if (d.hidden) return;
-  if (e.key === 'Escape') { e.preventDefault(); closeAcct(); return; }
+  const d = openModal();
+  if (!d) return;
+  if (e.key === 'Escape') { e.preventDefault(); d.id === 'acctBox' ? closeAcct() : hidePop(true); return; }
   if (e.key !== 'Tab') return;
-  const f = [...d.querySelectorAll('input, button')].filter((x) => !x.hidden && !x.disabled);
+  const f = [...d.querySelectorAll('input, button, a[href], [tabindex="0"]')].filter((x) => !x.hidden && !x.disabled && x.offsetParent !== null);
   const first = f[0], last = f[f.length - 1];
   if (!d.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
   else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -757,7 +811,7 @@ document.addEventListener('keydown', (e) => {
 // ---------- build tooltips (hover, focus, or tap), kept inside the screen ----------
 const tipEl = Object.assign(document.createElement('div'), { className: 'tip', hidden: true });
 tipEl.setAttribute('role', 'tooltip');
-document.body.append(tipEl);
+document.querySelector('main').append(tipEl); // inside a landmark (fixed position, so placement is unaffected)
 let tipFor = null;
 let tipAt = 0;
 function showTip(el) {
@@ -791,8 +845,60 @@ function currentId() {
   const h = location.hash.match(/^#(?:m-|\/m\/)(.+)$/);
   return h ? decodeURIComponent(h[1]) : null;
 }
+// In-app history, so "back" returns where you came from (Upgrades -> map -> back = Upgrades, at the
+// same scroll spot) instead of always home. Each entry: { h: hash, y: scroll, pop: brawler card open }.
+let nav = (() => { try { const v = JSON.parse(sessionStorage.getItem('nav') || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } })();
+let pendingScroll = 0; // where route() should scroll after a navigation (null = stay put)
+let pendingPop = null; // brawler card to reopen after going back
+const saveNav = () => { try { sessionStorage.setItem('nav', JSON.stringify(nav.slice(-30))); } catch { /* private mode */ } };
+function trackNav() {
+  const h = location.hash || '#';
+  const top = nav[nav.length - 1];
+  if (top?.h === h) { pendingScroll = top.y || 0; } // reload
+  else if (nav[nav.length - 2]?.h === h) { nav.pop(); pendingScroll = nav[nav.length - 1].y || 0; pendingPop = nav[nav.length - 1].pop ?? null; } // back
+  else { nav.push({ h, y: 0 }); pendingScroll = 0; }
+  if (nav.length) delete nav[nav.length - 1].pop;
+  saveNav();
+}
+let scrollSave = null;
+window.addEventListener('scroll', () => {
+  clearTimeout(scrollSave);
+  scrollSave = setTimeout(() => { if (nav.length) { nav[nav.length - 1].y = Math.round(scrollY); saveNav(); } }, 120);
+}, { passive: true });
+// Label and target for the back link: the previous screen in this visit, or home.
+function backTarget() {
+  const prev = nav[nav.length - 2]?.h;
+  if (!prev) return { label: 'All maps', inApp: false };
+  if (prev === '#' || prev === '') return { label: 'All maps', inApp: true };
+  if (prev === '#upgrades') return { label: 'Upgrades', inApp: true };
+  const b = prev.match(/^#b-(\d+)$/)?.[1];
+  if (b && DATA.brawlers[b]) return { label: DATA.brawlers[b].n, inApp: true };
+  const m = prev.match(/^#m-(.+)$/)?.[1];
+  const mm = m && mapsById.get(decodeURIComponent(m));
+  if (mm) return { label: mm.name, inApp: true };
+  return { label: 'All maps', inApp: false };
+}
+const backLink = () => `<a class="back" href="#" data-back>← ${esc(backTarget().label)}</a>`;
+function goBack() {
+  if (backTarget().inApp) history.back(); else location.hash = '';
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest?.('[data-back]');
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  e.preventDefault();
+  goBack();
+});
+
 let lastBrawler = null;
 function route() {
+  const scrollTo = pendingScroll;
+  pendingScroll = null;
+  const reopen = pendingPop;
+  pendingPop = null;
+  const afterRender = () => {
+    if (scrollTo != null) window.scrollTo(0, scrollTo);
+    if (reopen) openPop(reopen);
+  };
   requestAnimationFrame(() => { const r = q.getBoundingClientRect(); fab.classList.toggle('away', !searchView.hidden && r.bottom > 0 && r.top < innerHeight); });
   const id = currentId();
   const map = id && mapsById.get(id);
@@ -806,28 +912,27 @@ function route() {
     mapView.hidden = true;
     searchView.hidden = true;
     document.title = 'Upgrades · Brawl Picks';
-    window.scrollTo(0, 0);
   } else if (bid && DATA.brawlers[bid]) {
     if (bid !== lastBrawler) { bShowAll = false; lastBrawler = bid; }
     renderBrawler(bid);
     mapView.hidden = false;
     searchView.hidden = true;
     document.title = `${DATA.brawlers[bid].n} · Brawl Picks`;
-    window.scrollTo(0, 0);
   } else if (map) {
     renderMap(map);
     mapView.hidden = false;
     searchView.hidden = true;
     document.title = `${map.name} · Brawl Picks`;
-    window.scrollTo(0, 0);
   } else {
     mapView.hidden = true;
     searchView.hidden = false;
     document.title = 'Brawl Picks';
     renderLive();
     renderResults();
-    if (matchMedia('(pointer: fine)').matches) q.focus();
+    if (matchMedia('(pointer: fine)').matches && scrollTo === 0 && !reopen) q.focus({ preventScroll: true });
   }
+  $('#upBack').innerHTML = `← ${esc(backTarget().label)}`;
+  afterRender();
 }
 
 function openBrawler(id) {
@@ -840,12 +945,16 @@ function open(id) {
 }
 
 // ---------- events ----------
-q.addEventListener('input', () => { sel = 0; renderResults(); });
+// Clear button at the right of the search box (the browser's own one differs per browser).
+const qClear = $('#qClear');
+const syncClear = () => { qClear.hidden = !q.value; $('#kbdHint').hidden = !!q.value; };
+qClear.addEventListener('click', () => { q.value = ''; sel = 0; syncClear(); renderResults(); q.focus(); });
+q.addEventListener('input', () => { sel = 0; syncClear(); renderResults(); });
 q.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
   else if (e.key === 'Enter' && shown[sel]) { e.preventDefault(); shown[sel].brawler ? openBrawler(shown[sel].brawler) : open(shown[sel].id); }
-  else if (e.key === 'Escape') { q.value = ''; sel = 0; renderResults(); }
+  else if (e.key === 'Escape') { q.value = ''; sel = 0; syncClear(); renderResults(); }
 });
 q.addEventListener('focus', () => q.select());
 $('#moreMaps').addEventListener('click', () => { showOthers = !showOthers; renderResults(); });
@@ -867,17 +976,17 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const shortcut = isMac ? '⌘K' : 'Ctrl+K';
 function goSearch() {
   hideTip();
-  if (searchView.hidden) { location.hash = ''; route(); } // show the search screen now, not after hashchange
+  if (searchView.hidden) { location.hash = ''; trackNav(); route(); } // now, so phones open the keyboard
   window.scrollTo(0, 0);
   q.focus(); // inside the tap/keypress, so phones open the keyboard
   q.select();
 }
 document.addEventListener('keydown', (e) => {
-  if (e.defaultPrevented || !$('#acctBox').hidden) return; // the dialog handles its own keys
+  if (e.defaultPrevented || openModal()) return; // dialogs handle their own keys
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
   if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); goSearch(); }
   else if (e.key === '/' && !typing) { e.preventDefault(); goSearch(); }
-  else if (e.key === 'Escape' && !mapView.hidden) location.hash = '';
+  else if (e.key === 'Escape' && (!mapView.hidden || !upView.hidden) && !typing) goBack();
 });
 const fab = $('#searchFab');
 // No floating search button while the search box itself is on screen.
@@ -899,6 +1008,6 @@ function maybeShowTip() {
   ok.addEventListener('click', () => { d.hidden = true; store.set('searchTipSeen', '1'); q.focus(); }, { once: true });
 }
 setTimeout(maybeShowTip, 1200);
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => { hidePop(); trackNav(); route(); });
 
 load();
