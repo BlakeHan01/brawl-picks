@@ -426,6 +426,30 @@ function renderMap(m) {
   bindView();
 }
 
+// Best build, one row per piece (brawler page): icon, what it is, why, and whether you have it.
+function buildRows(id, own) {
+  const b = DATA.brawlers[id]?.b, I = DATA.items || {};
+  if (!b) return '';
+  const ids = (xs) => (xs || []).map((x) => x?.id ?? x);
+  const icon = (itemId, kind) => (I[itemId]?.img ? `<img class="${kind}" src="${esc(I[itemId].img)}" alt="" loading="lazy">` : '');
+  const mine = (state, text) => (own ? `<span class="bd-own ${state}">${text}</span>` : '');
+  const one = (x, kind, label) => {
+    if (!x) return '';
+    const have = own ? ids(own[kind === 'sp' ? 'starPowers' : 'gadgets']) : [];
+    const owned = !own ? '' : have.includes(x[0]) ? mine('yes', 'You have it') : have.length ? mine('alt', 'You have the other one') : mine('no', 'Not unlocked yet');
+    return `<li><span class="bd-ic">${icon(x[0], kind)}</span>
+      <span class="bd-t"><small>${label}</small><b>${esc(I[x[0]]?.n || label)}</b><span>${x[3] ? `${Math.round(x[1])}% of top players buy it first` : 'Close call: either one is fine'}</span></span>${owned}</li>`;
+  };
+  let gears = '';
+  if (b.gear) {
+    const pair = b.gear[0], have = own ? ids(own.gears) : [];
+    const n = pair.filter((g) => have.includes(g)).length;
+    gears = `<li><span class="bd-ic pair">${pair.map((g) => icon(g, 'gear')).join('')}</span>
+      <span class="bd-t"><small>Gears</small><b>${pair.map((g) => esc(I[g]?.n || 'Gear')).join(' + ')}</b><span>${b.gear[3] ? 'The pair most top players run' : 'A common pair; others work too'}</span></span>${own ? (n === 2 ? mine('yes', 'You have both') : n === 1 ? mine('alt', 'You have 1 of 2') : mine('no', 'Not unlocked yet')) : ''}</li>`;
+  }
+  return `<ul class="bd">${one(b.sp, 'sp', 'Star power')}${one(b.gad, 'gad', 'Gadget')}${gears}</ul>`;
+}
+
 // ---------- brawler page (#b-<id>): best maps, modes, build and teammates ----------
 let bstatsCache = null;
 function brawlerStats(id) {
@@ -467,6 +491,8 @@ function yoursLine(id) {
   const b = DATA.brawlers[id], own = me()?.brawlers.find((x) => Number(x.id) === Number(id));
   if (!own) return `<p class="bp-you">You don't have ${esc(b.n)} yet.</p>`;
   const r = readiness(own, b.b, costsFrom(DATA.costs));
+  // star power / gadget / gears already show as owned or not in the build (icons or rows)
+  r.missing = r.missing.filter((t) => !/star power|gadget|gear/i.test(t) || !b.b);
   return `<p class="bp-you"><span class="dotok"></span>Yours: power ${own.power}${r.missing.length ? ` · <span class="miss sm">${r.missing.map((t) => `<span>${esc(t)}</span>`).join('')}</span> <a href="#upgrades">Upgrade</a>` : ' · <span class="miss ok sm"><span>Fully built</span></span>'}</p>`;
 }
 const statTiles = (st) => {
@@ -537,7 +563,7 @@ function renderBrawler(id) {
       <div><h1>${esc(b.n)}</h1><p class="bp-cls">${cls(id)}${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}</p></div>
     </div>
     ${statTiles(st)}
-    ${b.b ? `<h2>Best build</h2><div class="bp-build">${build(id, false, own || null)}</div>` : ''}
+    ${b.b ? `<h2>Best build</h2>${buildRows(id, own || null)}` : ''}
     ${you}
     ${st.modes.length ? `<h2>Best modes</h2><ul class="bp-modes">${st.modes.map((k) => `<li style="--mc:${esc(k.color || '#888')}"><span class="d"></span>${esc(k.mode)} <b class="num">${pct(k.win)}</b></li>`).join('')}</ul>` : ''}
     ${st.maps.length ? `<h2>Best maps <small>rank among all brawlers</small></h2>
