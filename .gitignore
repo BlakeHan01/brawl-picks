@@ -5,3 +5,6 @@ node_modules/
 /data/
 /site/data/*.json
 /site/img/
+
+# Wrangler local state (wrangler dev)
+.wrangler/

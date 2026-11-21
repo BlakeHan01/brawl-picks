@@ -18,6 +18,7 @@
   <div class="wrap">
     <header class="top">
       <a class="logo" href="#" aria-label="Home">Brawl<span>Picks</span></a>
+      <button id="acctBtn" class="acct" hidden>Add player tag</button>
     </header>
 
     <main>
@@ -48,6 +49,20 @@
   <button id="searchFab" class="fab" aria-label="Search maps">
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
   </button>
+
+  <div id="acctBox" class="sheet" role="dialog" aria-labelledby="acctTitle" hidden>
+    <form id="acctForm" class="sheet-in">
+      <h2 id="acctTitle">Your player tag</h2>
+      <p>Find it under your name in your in-game profile. We look up which brawlers you own and how built up they are, to make Curated pick. It's saved on this device only.</p>
+      <input id="tagIn" placeholder="#2PP0Y8LQ" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Player tag" maxlength="14" />
+      <p id="acctMsg" class="msg" role="status"></p>
+      <div class="row">
+        <button class="btn" type="submit">Save</button>
+        <button class="btn ghost" type="button" id="acctCancel">Cancel</button>
+        <button class="btn ghost danger" type="button" id="acctRemove">Remove</button>
+      </div>
+    </form>
+  </div>
 
   <div id="searchTip" class="tipbox" role="dialog" aria-labelledby="tipTitle" hidden>
     <p id="tipTitle"><b>Tip:</b> press <span id="tipKeys"></span> anywhere to jump to search.</p>
