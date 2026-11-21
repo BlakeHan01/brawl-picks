@@ -1,7 +1,7 @@
-import { searchMaps, initials } from './search.js';
+import { searchMaps, searchBrawlers, initials } from './search.js';
 import { API_BASE } from './config.js';
 import { modeName, modeColor, isSoloMode } from './modes.js';
-import { curate, costsFrom, normalizeTag } from './curate.js';
+import { curate, costsFrom, normalizeTag, readiness } from './curate.js';
 import { upgradeChains, makePlan, saveUpFor } from './advisor.js';
 
 const $ = (s) => document.querySelector(s);
@@ -187,10 +187,12 @@ function renderResults() {
   const all = text ? searchMaps(text, pool()) : defaultList();
   const main = text || showOthers || modeFilter ? all : all.filter((m) => m.ranked || m.active);
   const hiddenCount = all.length - main.length;
-  shown = main;
+  // brawlers whose name matches come first: "be" -> Belle, then Belle's Rock
+  const brs = text && !modeFilter ? searchBrawlers(text, Object.entries(DATA.brawlers).map(([id, b]) => ({ id, name: b.n }))).map((b) => ({ brawler: b.id })) : [];
+  shown = [...brs, ...main];
   sel = Math.min(sel, Math.max(0, shown.length - 1));
   $('#listHead').innerHTML = text ? 'Matches <small>↑↓ to move · Enter to open</small>' : `${showOthers || modeFilter ? 'All maps' : 'Ranked and live maps'} <small>${shown.length}</small>`;
-  results.innerHTML = shown.map((m, i) => `
+  results.innerHTML = shown.map((m, i) => m.brawler ? brawlerOption(m.brawler, i) : `
     <li role="option" data-id="${esc(m.id)}" class="${i === sel ? 'sel' : ''}" aria-selected="${i === sel}">
       <span class="dot" style="--mc:${esc(m.modeColor || '#888')}"></span>
       <span class="name"><span class="nt">${highlight(m.name)}</span><small class="mline">${esc(m.mode)}</small></span>
@@ -200,12 +202,21 @@ function renderResults() {
         <span class="mname">${esc(m.mode)}</span><span class="enter">↵</span>
       </span>
     </li>`).join('');
-  hint.textContent = text && !shown.length ? 'No map matches. Try the first letter of each word.' : '';
+  hint.textContent = text && !shown.length ? 'No map or brawler matches. For maps, try the first letter of each word.' : '';
   $('#liveWrap').hidden = !ROT.events.length || !!text;
   const more = $('#moreMaps');
   more.hidden = !!text || !!modeFilter || (!hiddenCount && !showOthers);
   more.textContent = showOthers ? 'Show fewer maps' : `Other maps (${hiddenCount})`;
   more.setAttribute('aria-expanded', String(showOthers));
+}
+
+function brawlerOption(id, i) {
+  const b = DATA.brawlers[id], st = brawlerStats(id);
+  return `<li role="option" data-b="${esc(id)}" class="bopt${i === sel ? ' sel' : ''}" aria-selected="${i === sel}">
+      ${av(id, 'sq')}
+      <span class="name"><span class="nt">${esc(b.n)}</span><small class="mline">Brawler</small></span>
+      <span class="meta">${cls(id)}${st.best ? `<span class="bbest">Best: ${esc(st.best.m.name)}</span>` : ''}<span class="enter">↵</span></span>
+    </li>`;
 }
 
 function defaultList() {
@@ -407,6 +418,79 @@ function renderMap(m) {
   $('#linkHere')?.addEventListener('click', openAcct);
   $('#changeAcct')?.addEventListener('click', (e) => { e.preventDefault(); openAcct(e); });
   bindView();
+}
+
+// ---------- brawler page (#b-<id>): best maps, modes, build and teammates ----------
+let bstatsCache = null;
+function brawlerStats(id) {
+  if (bstatsCache?.at !== DATA.generatedAt) bstatsCache = { at: DATA.generatedAt, by: {} };
+  if (bstatsCache.by[id]) return bstatsCache.by[id];
+  id = Number(id);
+  const maps = [];
+  let g = 0, w = 0, pick = 0, ban = 0, nr = 0;
+  for (const m of MAPS) {
+    const rows = rowsOf(m);
+    const i = rows.findIndex((r) => Number(r[0]) === id);
+    if (i < 0) continue;
+    const r = rows[i];
+    maps.push({ m, rank: i + 1, of: rows.length, row: r });
+    if (m.ranked) { g += r[4]; w += r[2] * r[4]; pick += r[3]; ban += r[5] || 0; nr++; }
+  }
+  maps.sort((a, b) => a.rank / a.of - b.rank / b.of || b.row[1] - a.row[1]);
+  const modes = {};
+  for (const x of maps) if (x.m.ranked) { const k = (modes[x.m.mode] ||= { mode: x.m.mode, color: x.m.modeColor, g: 0, w: 0 }); k.g += x.row[4]; k.w += x.row[2] * x.row[4]; }
+  const partners = {};
+  for (const m of MAPS) for (const [ids, win, games, syn] of m.combos?.duos || []) {
+    if (!ids.map(Number).includes(id)) continue;
+    const o = ids.map(Number).find((x) => x !== id);
+    const p = (partners[o] ||= { id: o, g: 0, w: 0, syn: 0 });
+    p.g += games; p.w += win * games; p.syn += syn * games;
+  }
+  const out = {
+    maps, best: maps.find((x) => x.m.ranked) || maps[0],
+    win: g ? w / g : null, pick: nr ? pick / nr : null, ban: nr ? ban / nr : null, games: g,
+    modes: Object.values(modes).map((k) => ({ ...k, win: k.w / k.g })).sort((a, b) => b.win - a.win),
+    partners: Object.values(partners).map((p) => ({ id: p.id, games: p.g, win: p.w / p.g, syn: p.syn / p.g })).sort((a, b) => b.win - a.win).slice(0, 4),
+  };
+  bstatsCache.by[id] = out;
+  return out;
+}
+let bShowAll = false;
+function renderBrawler(id) {
+  const b = DATA.brawlers[id], st = brawlerStats(id);
+  const own = PLAYER?.brawlers.find((x) => Number(x.id) === Number(id));
+  const tile = (v, label, f = pct) => `<div class="bp-tile"><b class="num">${v == null ? '–' : f(v)}</b><span>${label}</span></div>`;
+  const list = bShowAll ? st.maps : st.maps.slice(0, 8);
+  let you = '';
+  if (PLAYER) {
+    if (!own) you = `<p class="bp-you">You don't have ${esc(b.n)} yet.</p>`;
+    else {
+      const r = readiness(own, b.b, costsFrom(DATA.costs));
+      you = `<p class="bp-you"><span class="dotok"></span>Yours: power ${own.power}${r.missing.length ? ` · <span class="miss sm">${r.missing.map((t) => `<span>${esc(t)}</span>`).join('')}</span> <a href="#upgrades">Upgrade</a>` : ' · <span class="miss ok sm"><span>Fully built</span></span>'}</p>`;
+    }
+  }
+  mapView.innerHTML = `
+    <a class="back" href="#">← All maps</a>
+    <div class="bp-head">
+      ${av(id, 'sq bp-av')}
+      <div><h1>${esc(b.n)}</h1><p class="bp-cls">${cls(id)}${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}</p></div>
+    </div>
+    <div class="bp-tiles" title="Legendary+ Ranked games, last ${DATA.window?.days ?? 14} days">
+      ${tile(st.win, 'Win')}${tile(st.pick, 'Picked')}${tile(st.ban, 'Banned')}
+    </div>
+    ${b.b ? `<h2>Best build</h2><div class="bp-build">${build(id, false, own || null)}</div>` : ''}
+    ${you}
+    ${st.modes.length ? `<h2>Best modes</h2><ul class="bp-modes">${st.modes.map((k) => `<li style="--mc:${esc(k.color || '#888')}"><span class="d"></span>${esc(k.mode)} <b class="num">${pct(k.win)}</b></li>`).join('')}</ul>` : ''}
+    ${st.maps.length ? `<h2>Best maps <small>rank here</small></h2>
+    <ol class="bp-maps">${list.map((x) => `<li><a href="#m-${esc(x.m.id)}">
+        <span class="dot" style="--mc:${esc(x.m.modeColor || '#888')}"></span>
+        <span class="name"><span class="nt">${esc(x.m.name)}</span><small class="mline">${esc(x.m.mode)}${x.m.ranked ? '<span class="nt2"> · Ranked</span>' : ''}${x.m.active ? '<span class="nt2"> · Live</span>' : ''}</small></span>
+        ${x.m.ranked ? '<b class="tag">Ranked</b>' : ''}${x.m.active ? '<b class="tag live">Live</b>' : ''}
+        <span class="bp-rk num" title="${n(x.row[4])} games">#${x.rank}<small>/${x.of}</small></span>
+        <span class="bp-wr num">${pct(x.row[2])}</span></a></li>`).join('')}</ol>
+    ${st.maps.length > 8 ? `<button class="morebtn" id="bMore" type="button" aria-expanded="${bShowAll}">${bShowAll ? 'Show fewer maps' : `All ${st.maps.length} maps`}</button>` : ''}` : '<p class="empty">Not enough high-skill games with this brawler yet.</p>'}
+    ${st.partners.length ? `<h2>Best with</h2><ul class="bp-mates">${st.partners.map((p) => `<li><a href="#b-${p.id}">${av(p.id, 'sq')}<span class="bn">${esc(DATA.brawlers[p.id]?.n)}</span><span class="num">${pct(p.win)}</span>${p.syn >= 0.5 ? `<small class="up">+${p.syn.toFixed(1)}</small>` : ''}</a></li>`).join('')}</ul>` : ''}`;
+  $('#bMore')?.addEventListener('click', () => { bShowAll = !bShowAll; renderBrawler(id); });
 }
 
 // Best duos and trios: [[ids], win %, games, synergy points].
@@ -704,10 +788,12 @@ function currentId() {
   const h = location.hash.match(/^#(?:m-|\/m\/)(.+)$/);
   return h ? decodeURIComponent(h[1]) : null;
 }
+let lastBrawler = null;
 function route() {
   requestAnimationFrame(() => { const r = q.getBoundingClientRect(); fab.classList.toggle('away', !searchView.hidden && r.bottom > 0 && r.top < innerHeight); });
   const id = currentId();
   const map = id && mapsById.get(id);
+  const bid = location.hash.match(/^#b-(\d+)$/)?.[1];
   upView.hidden = true;
   const onUp = location.hash === '#upgrades';
   if (onUp) $('#upLink').setAttribute('aria-current', 'page'); else $('#upLink').removeAttribute('aria-current');
@@ -717,6 +803,13 @@ function route() {
     mapView.hidden = true;
     searchView.hidden = true;
     document.title = 'Upgrades · Brawl Picks';
+    window.scrollTo(0, 0);
+  } else if (bid && DATA.brawlers[bid]) {
+    if (bid !== lastBrawler) { bShowAll = false; lastBrawler = bid; }
+    renderBrawler(bid);
+    mapView.hidden = false;
+    searchView.hidden = true;
+    document.title = `${DATA.brawlers[bid].n} · Brawl Picks`;
     window.scrollTo(0, 0);
   } else if (map) {
     renderMap(map);
@@ -734,6 +827,10 @@ function route() {
   }
 }
 
+function openBrawler(id) {
+  location.hash = `#b-${id}`;
+  q.blur();
+}
 function open(id) {
   location.hash = `#m-${encodeURIComponent(id)}`;
   q.blur();
@@ -744,14 +841,14 @@ q.addEventListener('input', () => { sel = 0; renderResults(); });
 q.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
-  else if (e.key === 'Enter' && shown[sel]) { e.preventDefault(); open(shown[sel].id); }
+  else if (e.key === 'Enter' && shown[sel]) { e.preventDefault(); shown[sel].brawler ? openBrawler(shown[sel].brawler) : open(shown[sel].id); }
   else if (e.key === 'Escape') { q.value = ''; sel = 0; renderResults(); }
 });
 q.addEventListener('focus', () => q.select());
 $('#moreMaps').addEventListener('click', () => { showOthers = !showOthers; renderResults(); });
 results.addEventListener('click', (e) => {
-  const li = e.target.closest('li[data-id]');
-  if (li) open(li.dataset.id);
+  const li = e.target.closest('li[data-id], li[data-b]');
+  if (li?.dataset.b) openBrawler(li.dataset.b); else if (li) open(li.dataset.id);
 });
 $('#chips').addEventListener('click', (e) => {
   const c = e.target.closest('.chip');
@@ -784,7 +881,7 @@ const fab = $('#searchFab');
 if ('IntersectionObserver' in window) {
   new IntersectionObserver(([en]) => fab.classList.toggle('away', en.isIntersecting && !searchView.hidden)).observe(q);
 }
-fab.title = `Search maps (/ or ${shortcut})`;
+fab.title = `Search maps and brawlers (/ or ${shortcut})`;
 fab.addEventListener('click', goSearch);
 $('#kbdHint').textContent = isMac ? '⌘K' : '/';
 

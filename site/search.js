@@ -59,3 +59,24 @@ export function searchMaps(query, maps, { limit = 12 } = {}) {
   out.sort((a, b) => a.tier - b.tier || a.pri - b.pri || a.s - b.s || a.m.name.localeCompare(b.m.name));
   return out.slice(0, limit).map((x) => x.m);
 }
+
+// Brawler search by name: "be" -> Belle, "mr p" -> Mr. P, "8" -> 8-Bit. Name prefixes only (plus
+// substrings from 3 letters), so map initials like "hrm" don't pull in random brawlers.
+// brawlers: [{ id, name }] -> best matches first
+export function searchBrawlers(query, brawlers, { limit = 4 } = {}) {
+  const q = normalize(query).replace(/\s+/g, ' ');
+  const cq = q.replace(/[^a-z0-9]/g, '');
+  if (!cq) return [];
+  const out = [];
+  for (const b of brawlers) {
+    const full = normalize(b.name), compact = full.replace(/[^a-z0-9]/g, '');
+    let s = null;
+    if (compact === cq) s = 0;
+    else if (compact.startsWith(cq)) s = 1;
+    else if (words(b.name).some((w) => w.startsWith(cq))) s = 2;
+    else if (cq.length >= 3 && compact.includes(cq)) s = 3;
+    if (s !== null) out.push({ b, s });
+  }
+  out.sort((x, y) => x.s - y.s || x.b.name.localeCompare(y.b.name));
+  return out.slice(0, limit).map((x) => x.b);
+}
