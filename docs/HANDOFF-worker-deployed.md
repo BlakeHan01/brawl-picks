@@ -34,9 +34,13 @@ Put it in `site/config.js` as `API_BASE` (create that file if it doesn't exist y
 - CORS: `Access-Control-Allow-Origin: https://blakehan01.github.io` present on `/rotation`.
 - `GH_TOKEN` sanity check: `GET /repos/BlakeHan01/brawl-picks/actions/workflows/daily.yml` with the token → 200. (A `GET .../actions/permissions` returns 403 — expected, the token has no admin permission; it does not affect dispatch.)
 
-## Not yet verified — cron
+## ✅ Verified — cron
 
-The cron's first fire after deploy is 05:17 UTC / 21:17 PST on 2026-11-20. A check is scheduled for 21:35 PST that day to confirm a `daily.yml` run with event `workflow_dispatch` appears in GitHub Actions. Until that check reports, treat the cron as deployed-but-unconfirmed. Do not trigger a manual dispatch to "test" it — the check covers it.
+**Verified 2026-11-20 ~22:35 PST.** The Worker's cron fired on schedule: a `daily.yml` run on branch `main` was created at **2026-11-21T06:17:23Z (22:17:23 PST Nov 20)** — exactly the first `17 */3 * * *` (UTC) fire after the ~03:54 UTC deploy — with event `workflow_dispatch`.
+
+- Run: [44874827218](https://github.com/BlakeHan01/brawl-picks/actions/runs/44874827218) — **completed, success**
+- Jobs: `data` ✓ 3m39s, `deploy` ✓ 8s
+- (Note: the earlier draft of this doc said the first fire would be 05:17 UTC / 21:17 PST — that was a misread; 05:17 UTC is 21:17 PST on Nov 19, before the deploy. The correct first fire was 06:17 UTC / 22:17 PST Nov 20, which is what fired.)
 
 ## What Claude should do (site side)
 
@@ -49,4 +53,4 @@ The cron's first fire after deploy is 05:17 UTC / 21:17 PST on 2026-11-20. A che
 
 - Do NOT re-register the Brawl Stars developer account or re-create the `brawl-picks` key. Do NOT re-create the `brawl-picks-worker` GitHub token.
 - The Cloudflare dashboard shows a build (#979c8550, "Manually deployed", root `/`, deploy command `npx wrangler deploy`) that was started from the dashboard while the subdomain was being registered. It is NOT the deploy path — `wrangler deploy` from `worker/` is canonical, and the URL above is the live one. That dashboard build will likely fail (no `wrangler.toml` at repo root); ignore it, don't "fix" it by moving `wrangler.toml` to the root.
-- The original handoff (`docs/HANDOFF-cloudflare-worker.md`) is now fulfilled except the cron check above. Its "Done when" checklist: rotation ✓, player 404/400 ✓, CORS header ✓ (browser-console check from the live site is still yours to do after you wire up `API_BASE`), cron ⏳ (check at 21:35 PST 2026-11-20), no secrets in repo ✓, worker tests ✓ (13 passing).
+- The original handoff (`docs/HANDOFF-cloudflare-worker.md`) is now fully fulfilled. Its "Done when" checklist: rotation ✓, player 404/400 ✓, CORS header ✓ (browser-console check from the live site is still yours to do after you wire up `API_BASE`), cron ✓ (verified 2026-11-20 22:35 PST — run 44874827218 fired at 06:17:23Z and succeeded), no secrets in repo ✓, worker tests ✓ (13 passing).
