@@ -147,10 +147,12 @@ function renderFoot() {
 
 // ---------- avatars ----------
 const abbr = (n) => { const w = String(n).replace(/[^A-Za-z0-9& ]/g, ' ').split(/\s+/).filter(Boolean); return (w.length > 1 ? w[0][0] + w[1][0] : String(n).replace(/[^A-Za-z0-9]/g, '').slice(0, 2)).toUpperCase(); };
-function av(id, cls = '') {
+// pop: tapping the picture opens the brawler card (a pointer shortcut; keyboard and screen
+// reader users get the same card from the name button next to it).
+function av(id, cls = '', pop = false) {
   const b = DATA.brawlers[id] || { n: '?' };
   const img = b.img ? `<img src="${esc(b.img)}" alt="" loading="lazy" onerror="this.remove()">` : '';
-  return `<span class="av ${cls}" title="${esc(b.n)}">${esc(abbr(b.n))}${img}</span>`;
+  return `<span class="av ${cls}${pop ? ' pop' : ''}" title="${esc(b.n)}"${pop ? ` data-bpop="${esc(id)}"` : ''}>${esc(abbr(b.n))}${img}</span>`;
 }
 
 // ---------- home ----------
@@ -379,7 +381,7 @@ function renderMap(m) {
     <ol class="top5">${top.map((it, i) => `
       <li>
         <span class="rank">${i + 1}</span>
-        ${av(it.r[0], 'sq')}
+        ${av(it.r[0], 'sq', true)}
         <button class="bn bname" type="button" data-bpop="${esc(it.r[0])}">${esc(B[it.r[0]]?.n)}</button>
         ${cls(it.r[0])}
         ${build(it.r[0], false, it.c?.own)}
@@ -394,7 +396,7 @@ function renderMap(m) {
     <ul class="rest">${rest.map((it, i) => `
       <li>
         <span class="rk">${i + 6}</span>
-        ${av(it.r[0], 'sq')}
+        ${av(it.r[0], 'sq', true)}
         <span class="rn"><b><button class="bname" type="button" data-bpop="${esc(it.r[0])}">${esc(B[it.r[0]]?.n)}</button> ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true, it.c?.own)}${missing(it, true)}<span title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}${banChip(it.r)}</span></span>
         <span class="barwrap"><span class="bar" style="width:${bar(val(it)).toFixed(0)}%"></span></span>
         <span class="wr">${big(it)}</span>
@@ -555,7 +557,7 @@ function renderCombos(m) {
     <ol class="combos">${list.map(([ids, win, games, syn], i) => `
       <li>
         <span class="rk">${i + 1}</span>
-        <span class="cav">${ids.map((id) => av(id, 'sq')).join('')}</span>
+        <span class="cav">${ids.map((id) => av(id, 'sq', true)).join('')}</span>
         <span class="cn"><b>${ids.map((id) => `<button class="bname" type="button" data-bpop="${esc(id)}">${esc(B[id]?.n)}</button>`).join(' + ')}</b>
           <span>${n(games)} games${syn ? ` · <i class="${syn > 0 ? 'up' : 'down'}">${syn > 0 ? '+' : ''}${syn.toFixed(1)} together</i>` : ''}${mine(ids) ? ' · <i class="up">you have these</i>' : ''}</span></span>
         <span class="wr ${win >= 55 ? 'hi' : ''}">${pct(win)}</span>
@@ -640,7 +642,7 @@ function upCard(p, rank, maxGain, U) {
   const top = [...chain[p.to].top].sort((x, y) => x[1] - y[1]);
   return `<li class="up-card">
     ${rank ? `<span class="up-rank" aria-hidden="true">${rank}</span>` : ''}
-    ${av(p.id, 'sq up-av')}
+    ${av(p.id, 'sq up-av', true)}
     <div class="up-main">
       <div class="up-head">
         <h3 class="up-name"><button class="bname" type="button" data-bpop="${esc(p.id)}">${esc(b.n)}</button> <span class="up-now">${cls(p.id)} power ${own?.power ?? '?'} now</span></h3>

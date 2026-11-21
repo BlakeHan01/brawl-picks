@@ -117,6 +117,9 @@ async function dialogPattern(p, label, openSel, dialogSel) {
     check('Map page: back link says "All maps"', (await p.textContent('#mapView .back')).includes('All maps'));
     await audit(p, 'Map page');
     await dialogPattern(p, 'Brawler card', '.top5 .bname >> nth=0', '#bpop');
+    await p.click('#mapView .top5 .av.pop >> nth=1'); await settle(p, 200);
+    check('Tapping a brawler picture opens its card', await visible(p, '#bpop'));
+    await p.keyboard.press('Escape'); await settle(p, 150);
     await p.click('.top5 .bname >> nth=0'); await settle(p, 200);
     await p.click('#bpop [data-frompop] >> nth=0'); await settle(p);
     check('Card: tapping a map opens it and closes the card', (await hash(p)).startsWith('#m-') && !(await visible(p, '#bpop')));
@@ -176,6 +179,9 @@ async function dialogPattern(p, label, openSel, dialogSel) {
     check('Back returns to Upgrades at the same spot', (await hash(p)) === '#upgrades' && Math.abs(y1 - y0) < 60, `${y0} -> ${y1}`);
     check('…with that card\'s map list still open', await p.locator('#upPlan .up-card').nth(cardN).locator('details').evaluate((d) => d.open));
     await dialogPattern(p, 'Brawler card from Upgrades', '#upPlan .up-card .bname >> nth=0', '#bpop');
+    await p.click('#upPlan .up-card .av.pop >> nth=0'); await settle(p, 200);
+    check('Upgrades: tapping the picture opens the card', await visible(p, '#bpop'));
+    await p.keyboard.press('Escape'); await settle(p, 150);
     await p.click('#upPlan .up-card .bname >> nth=0'); await settle(p, 200);
     await p.click('#bpop .bpop-more'); await settle(p);
     check('Card "Full page" opens the brawler page', (await hash(p)).startsWith('#b-'));
