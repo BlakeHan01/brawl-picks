@@ -1,14 +1,17 @@
 // Curated pick: the player's own best brawlers for one map.
 //
-// Start from the map's ranking (our score), keep only brawlers the player owns, and take points
-// off for anything that's missing from their build, so a fully built brawler beats a slightly
-// stronger one that isn't. Brawlers below power 9 (no star power possible) are left out.
+// Keep only brawlers the player owns, then order in three groups, by our score within each:
+//   1. power 11 and fully built (the star power and gadget skilled players pick when that's clear,
+//      2 gears, hypercharge, all 3 buffies)
+//   2. power 11, something missing
+//   3. below power 11 (power 9-10), at the back
+// Brawlers below power 9 (no star power possible) are left out.
 //
 // rows:    map rows [brawlerId, score %, win %, pick %, games, ban %], best score first
 // profile: Worker /player response { brawlers: [{ id, power, starPowers, gadgets, gears, hyperCharges, buffies? }] }
 // builds:  brawlerId -> { sp: [id, share, n, clear], gad: [...], gear: [[id, id], ...] } (site data)
 
-// Points taken off the score (score is a win-rate estimate in %).
+// How far a brawler is from fully built (shown as a hint; ordering uses the groups above).
 export const PENALTY = {
   powerLevel: 2.5, // per level below 11
   noStarPower: 3,
@@ -41,7 +44,8 @@ export function readiness(own, build = {}) {
   return { missing, penalty: Math.round(penalty * 10) / 10 };
 }
 
-// -> [{ row, own, missing, penalty, curated }], best first.
+// -> [{ row, own, missing, penalty, tier, curated }], best first. tier 0 = power 11 fully built,
+// 1 = power 11 with something missing, 2 = below power 11. curated = the map score.
 export function curate(rows, profile, builds = {}) {
   const owned = new Map((profile?.brawlers || []).map((b) => [Number(b.id), b]));
   const out = [];
@@ -49,9 +53,10 @@ export function curate(rows, profile, builds = {}) {
     const own = owned.get(Number(row[0]));
     if (!own || own.power < MIN_POWER) continue;
     const { missing, penalty } = readiness(own, builds[row[0]]);
-    out.push({ row, own, missing, penalty, curated: Math.round((row[1] - penalty) * 10) / 10 });
+    const tier = own.power < 11 ? 2 : missing.length ? 1 : 0;
+    out.push({ row, own, missing, penalty, tier, curated: row[1] });
   }
-  return out.sort((a, b) => b.curated - a.curated || b.row[1] - a.row[1]);
+  return out.sort((a, b) => a.tier - b.tier || b.row[1] - a.row[1]);
 }
 
 // Player tags use these characters only; "O" is typed for "0" a lot.

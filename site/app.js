@@ -359,7 +359,7 @@ function renderMap(m) {
 
 function legend(m, hasBans) {
   const ordNow = order === 'banned' && !hasBans ? 'score' : order;
-  if (ordNow === 'curated') return `<b>Curated pick</b> ranks the brawlers you own (power 9+) by our score for this map, minus points for anything missing from your build: power level, the star power and gadget skilled players pick, gears, hypercharge and buffies. A fully built brawler can beat a slightly stronger one you haven't built.`;
+  if (ordNow === 'curated') return `<b>Curated pick</b> uses the brawlers you own: first the ones at power 11 and fully built (the star power and gadget skilled players pick, 2 gears, hypercharge, all buffies), then power 11 ones with something missing, then power 9–10 at the back. Within each group they're ordered by our score for this map.`;
   const skill = `Results are adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won (50% = average).`;
   if (ordNow === 'banned') return `<b>Most banned</b> orders brawlers by how often good players ban them on this map: the ones they least want to face, and the ones you're least likely to get. ${skill}`;
   if (ordNow === 'score') return `<b>Score</b> is our best guess at each brawler's win rate here. It starts from how often good players pick${hasBans ? ' or ban' : ''} it on this map and moves toward its actual results as games add up, with weights fitted from the data. ${skill}`;

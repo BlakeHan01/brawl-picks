@@ -18,19 +18,20 @@ test('a close-call star power is not held against the player', () => {
   assert.deepEqual(readiness(full(1, { starPowers: [9] }), { sp: [1, 52, 100, 0] }).missing, []);
 });
 
-test('curate: owned only, power 9+, built brawlers can overtake slightly stronger unbuilt ones', () => {
-  const rows = [[10, 56, 55, 10, 100, 5], [20, 55, 54, 10, 100, 5], [30, 54, 53, 10, 100, 5], [40, 53, 52, 10, 100, 5], [50, 60, 59, 10, 100, 5]];
+test('curate: power 11 fully built first, then power 11 missing pieces, then below 11; score within groups', () => {
+  const rows = [[10, 60, 59, 10, 100, 5], [20, 55, 54, 10, 100, 5], [30, 58, 57, 10, 100, 5], [40, 53, 52, 10, 100, 5], [50, 57, 56, 10, 100, 5], [60, 62, 61, 10, 100, 5]];
   const profile = { brawlers: [
-    full(10, { hyperCharges: [], buffies: { gadget: false, starPower: false, hyperCharge: false } }), // 56 - 1.5 - 1.2 = 53.3
-    full(20), // 55
-    full(30, { power: 8 }), // too low: left out
-    full(40), // 53
-  ] }; // 50 not owned
+    full(10, { hyperCharges: [] }), // power 11, missing hypercharge -> group 2
+    full(20), // fully built -> group 1
+    full(30, { power: 10 }), // below 11 -> group 3
+    full(40), // fully built -> group 1
+    full(50, { power: 8 }), // below 9: left out
+  ] }; // 60 not owned
   const c = curate(rows, profile, {});
-  assert.deepEqual(c.map((x) => x.row[0]), [20, 10, 40]);
-  assert.equal(c[1].curated, 53.3);
-  assert.deepEqual(c[1].missing, ['No hypercharge', 'Buffies 0/3']);
-  assert.ok(PENALTY.noHypercharge > 0);
+  assert.deepEqual(c.map((x) => x.row[0]), [20, 40, 10, 30]);
+  assert.deepEqual(c.map((x) => x.tier), [0, 0, 1, 2]);
+  assert.deepEqual(c[2].missing, ['No hypercharge']);
+  assert.equal(c[0].curated, 55);
 });
 
 test('tag normalization', () => {
