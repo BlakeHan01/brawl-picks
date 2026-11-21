@@ -140,7 +140,7 @@ function tick() {
 
 function renderFoot() {
   const parts = [];
-  if (DATA.generatedAt) parts.push(`Stats updated ${esc(new Date(DATA.generatedAt).toLocaleDateString())} from ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked games (${(DATA.battles?.legendary ?? 0).toLocaleString()} Legendary+, ${(DATA.battles?.masters ?? 0).toLocaleString()} Masters+) and ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games over the last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}`);
+  if (DATA.generatedAt) parts.push(`<span title="${(DATA.battles?.legendary ?? 0).toLocaleString()} Legendary+ and ${(DATA.battles?.masters ?? 0).toLocaleString()} Masters+ Ranked games, plus ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games">Updated ${esc(new Date(DATA.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} · ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked games, last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}</span>`);
   if (ROT.fetchedAt) parts.push(ROT.live ? 'timers live' : `timers checked ${ago(ROT.fetchedAt)}`);
   $('#foot').innerHTML = `${parts.join(' · ')}<br>Images from <a href="https://brawlify.com" rel="noopener">Brawlify</a>. Not affiliated with, endorsed or sponsored by Supercell.`;
 }
@@ -296,14 +296,12 @@ const notRanked = (id) => (DATA.notInRanked || []).includes(Number(id));
 const pct = (x) => `${x.toFixed(1)}%`;
 const n = (x) => Number(x).toLocaleString();
 
+// One short line under the map name: how many games, from whom, how recent.
 function basisText(m) {
   const d = DATA.window?.days ?? 14;
   const days = d === 1 ? 'last day' : `last ${d} days`;
-  if (m.basis === 'masters') return `Based on <b>${n(m.sample)}</b> Ranked games where every player was Masters or higher, ${days}.`;
-  if (m.basis === 'legendary') return `Based on <b>${n(m.sample)}</b> Ranked games where every player was Legendary or higher, ${days}.`;
-  if (m.basis === 'ranked') return `Based on <b>${n(m.sample)}</b> Ranked games by top players, ${days}.`;
-  if (m.basis === 'mixed') return `Based on <b>${n(m.sample)}</b> Ranked and high-trophy games by top players, ${days}.`;
-  return `Based on <b>${n(m.sample)}</b> trophy games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies, ${days}.`;
+  const who = { masters: 'Masters+ Ranked', legendary: 'Legendary+ Ranked', ranked: 'top-player Ranked', mixed: 'top-player' }[m.basis] || `${n(DATA.minTrophies ?? 750)}+ trophy`;
+  return `<b>${n(m.sample)}</b> ${who} games · ${days}`;
 }
 
 function renderMap(m) {
@@ -357,16 +355,18 @@ function renderMap(m) {
   const bigLabel = ord === 'curated' ? 'for you' : o.big;
   // One short line of stats; picked % is in the order "Most picked" and the tooltip, bans show as
   // a chip only when they matter (20%+), unless sorting by bans.
+  // Under the big number: win % only when the big number isn't already a win estimate, and a
+  // "Few games" flag when the sample is small. Everything else is in the tooltip.
   const sub = (r) => [
-    ord !== 'win' ? `${pct(r[2])} win` : null,
-    `${n(r[4])} games`,
+    ord === 'picked' || ord === 'banned' ? `${pct(r[2])} win` : null,
+    r[4] < 200 ? '<span class="few" title="Fewer than 200 games: treat as a rough guide">Few games</span>' : null,
   ].filter(Boolean);
   const banChip = (r) => (hasBans && ord !== 'banned' && r[5] >= 20 ? `<span class="banchip" title="Banned in ${pct(r[5])} of games here">Banned ${Math.round(r[5])}%</span>` : '');
   const statTip = (r) => `${pct(r[2])} win · ${pct(r[3])} picked${hasBans ? ` · ${pct(r[5])} banned` : ''} · ${n(r[4])} games`;
   // Chips only for what the icons can't show (power, hypercharge, buffies, nothing at all), plus the cost.
   const iconShown = /star power|gadget|gear/i;
   const missing = (it, small) => (it.c?.missing.length
-    ? `<span class="miss${small ? ' sm' : ''}">${it.c.missing.filter((t) => !iconShown.test(t) || /^No (star power|gadget)$/.test(t) && !DATA.brawlers[it.r[0]]?.b).map((t) => `<span>${esc(t)}</span>`).join('')}${it.c.penalty ? `<span class="cost" title="Points taken off the score for what's missing from your build">−${it.c.penalty.toFixed(1)} pts</span>` : ''}</span>`
+    ? `<span class="miss${small ? ' sm' : ''}" title="${esc(it.c.penalty ? `−${it.c.penalty.toFixed(1)} points for what's missing` : '')}">${it.c.missing.filter((t) => !iconShown.test(t) || /^No (star power|gadget)$/.test(t) && !DATA.brawlers[it.r[0]]?.b).map((t) => `<span>${esc(t)}</span>`).join('')}${it.c.penalty ? `` : ''}</span>`
     : it.c ? `<span class="miss ok${small ? ' sm' : ''}"><span>Fully built</span></span>` : '');
   const main = Object.entries(ORDERS).filter(([k, v]) => !v.more && (k !== 'banned' || hasBans));
   const more = Object.entries(ORDERS).filter(([, v]) => v.more);
@@ -388,7 +388,7 @@ function renderMap(m) {
         ${notRanked(it.r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
         <span class="wrbig ${(ord === 'score' || ord === 'win' || ord === 'curated') && val(it) >= 55 ? 'hi' : ''}" title="${esc(statTip(it.r))}">${big(it)}<small> ${bigLabel}</small></span>
         ${missing(it)}
-        <span class="ur">${sub(it.r).join(' · ')}</span>
+        ${sub(it.r).length ? `<span class="ur" title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}</span>` : ''}
         ${banChip(it.r)}
       </li>`).join('')}</ol>
     <details class="legend"><summary>How is this ranked?</summary><p>${legend(m, hasBans)}</p></details>
@@ -496,15 +496,19 @@ function openPop(id, e) {
     ${top.length ? `<h3 class="bpop-h">Best Ranked maps</h3><ol class="bp-maps sm">${top.map((x) => `<li><a href="#m-${esc(x.m.id)}" data-frompop>
         <span class="dot" style="--mc:${esc(x.m.modeColor || '#888')}"></span>
         <span class="name"><span class="nt">${esc(x.m.name)}</span><small class="mline">${esc(x.m.mode)}</small></span>
-        <span class="bp-rk num">#${x.rank}<small>/${x.of}</small></span><span class="bp-wr num">${pct(x.row[2])}</span></a></li>`).join('')}</ol>` : ''}
+        <span class="bp-rk num" title="${pct(x.row[2])} win">#${x.rank}<small> of ${x.of}</small></span></a></li>`).join('')}</ol>` : ''}
     <a class="btn bpop-more" href="#b-${esc(id)}">Full page →</a>`;
   $('#bpop').hidden = false;
   $('#bpopIn .bpop-x').focus();
+  // the phone's Back gesture should close the card, not leave the page (Baymard)
+  if (history.state?.bpop !== popId) history.pushState({ bpop: popId }, '');
 }
-function hidePop(restoreFocus = false) {
+function hidePop(restoreFocus = false, fromHistory = false) {
   const d = $('#bpop');
   if (d.hidden) return;
   d.hidden = true;
+  // closed with X / Escape / tap outside: drop the history entry the card added
+  if (!fromHistory && history.state?.bpop) history.back();
   popId = null;
   if (restoreFocus && popOpener?.isConnected) popOpener.focus();
   popOpener = null;
@@ -536,19 +540,20 @@ function renderBrawler(id) {
     ${b.b ? `<h2>Best build</h2><div class="bp-build">${build(id, false, own || null)}</div>` : ''}
     ${you}
     ${st.modes.length ? `<h2>Best modes</h2><ul class="bp-modes">${st.modes.map((k) => `<li style="--mc:${esc(k.color || '#888')}"><span class="d"></span>${esc(k.mode)} <b class="num">${pct(k.win)}</b></li>`).join('')}</ul>` : ''}
-    ${st.maps.length ? `<h2>Best maps <small>rank here</small></h2>
+    ${st.maps.length ? `<h2>Best maps <small>rank among all brawlers</small></h2>
     <ol class="bp-maps">${list.map((x) => `<li><a href="#m-${esc(x.m.id)}">
         <span class="dot" style="--mc:${esc(x.m.modeColor || '#888')}"></span>
         <span class="name"><span class="nt">${esc(x.m.name)}</span><small class="mline">${esc(x.m.mode)}${x.m.ranked ? '<span class="nt2"> · Ranked</span>' : ''}${x.m.active ? '<span class="nt2"> · Live</span>' : ''}</small></span>
         ${x.m.ranked ? '<b class="tag">Ranked</b>' : ''}${x.m.active ? '<b class="tag live">Live</b>' : ''}
-        <span class="bp-rk num" title="${n(x.row[4])} games">#${x.rank}<small>/${x.of}</small></span>
-        <span class="bp-wr num">${pct(x.row[2])}</span></a></li>`).join('')}</ol>
+        <span class="bp-rk num" title="${pct(x.row[2])} win · ${n(x.row[4])} games">#${x.rank}<small> of ${x.of}</small></span></a></li>`).join('')}</ol>
     ${st.maps.length > 8 ? `<button class="morebtn" id="bMore" type="button" aria-expanded="${bShowAll}">${bShowAll ? 'Show fewer maps' : `All ${st.maps.length} maps`}</button>` : ''}` : '<p class="empty">Not enough high-skill games with this brawler yet.</p>'}
     ${st.partners.length ? `<h2>Best with</h2><ul class="bp-mates">${st.partners.map((p) => `<li><a href="#b-${p.id}">${av(p.id, 'sq')}<span class="bn">${esc(DATA.brawlers[p.id]?.n)}</span><span class="num">${pct(p.win)}</span>${p.syn >= 0.5 ? `<small class="up">+${p.syn.toFixed(1)}</small>` : ''}</a></li>`).join('')}</ul>` : ''}`;
   $('#bMore')?.addEventListener('click', () => { bShowAll = !bShowAll; renderBrawler(id); });
 }
 
 // Best duos and trios: [[ids], win %, games, synergy points].
+// "Great together" etc. from how much better the combo does than its brawlers apart.
+const together = (syn, games) => (games < 60 ? '<span class="few">Few games</span>' : syn >= 3 ? '<i class="up">Great together</i>' : syn >= 1.5 ? '<i class="up">Good together</i>' : '');
 function renderCombos(m) {
   const B = DATA.brawlers;
   const mine = (ids) => PLAYER && ids.every((id) => PLAYER.brawlers.some((b) => b.id === id && b.power === 11));
@@ -559,7 +564,7 @@ function renderCombos(m) {
         <span class="rk">${i + 1}</span>
         <span class="cav">${ids.map((id) => av(id, 'sq', true)).join('')}</span>
         <span class="cn"><b>${ids.map((id) => `<button class="bname" type="button" data-bpop="${esc(id)}">${esc(B[id]?.n)}</button>`).join(' + ')}</b>
-          <span>${n(games)} games${syn ? ` · <i class="${syn > 0 ? 'up' : 'down'}">${syn > 0 ? '+' : ''}${syn.toFixed(1)} together</i>` : ''}${mine(ids) ? ' · <i class="up">you have these</i>' : ''}</span></span>
+          <span title="${n(games)} games · ${syn > 0 ? '+' : ''}${(syn || 0).toFixed(1)} points better together than apart">${together(syn, games)}${mine(ids) ? `${together(syn, games) ? ' · ' : ''}<i class="up">You have these</i>` : ''}</span></span>
         <span class="wr ${win >= 55 ? 'hi' : ''}">${pct(win)}</span>
       </li>`).join('')}</ol>`;
   return `
@@ -624,16 +629,17 @@ function upWhy(id, chain, from, to, maps) {
   const byMode = {};
   for (const [mi] of top) { const m = maps[mi]; const r = rowsOf(m).find((x) => Number(x[0]) === Number(id)); (byMode[m.mode] ||= []).push(r ? r[2] : 50); }
   const modes = Object.entries(byMode).sort((a, b) => b[1].length - a[1].length).slice(0, 2)
-    .map(([mode, w]) => `<b>${esc(mode)}</b> (${w.length} map${w.length > 1 ? 's' : ''}, ${(w.reduce((s, x) => s + x, 0) / w.length).toFixed(1)}% win)`);
-  const firsts = top.filter((x) => x[1] === 1).length;
+    .map(([mode]) => `<b>${esc(mode)}</b>`);
   const out = [];
   if (own && own.power < 9 && from === 0) out.push(`Gets it to power 9, so Curated pick can use it.`);
-  if (top.length) out.push(`One of your top 3 on <b>${top.length} of ${maps.length}</b> Ranked maps${firsts ? `, your #1 on ${firsts}` : ''}. Strongest in ${modes.join(' and ')}.`);
+  if (top.length) out.push(`A top pick for you on <b>${top.length}</b> Ranked map${top.length > 1 ? 's' : ''}, best in ${modes.join(' and ')}.`);
   let big = null;
   for (let k = from; k <= to; k++) if (!big || chain[k].gain > big.gain) big = chain[k];
-  if (to > from && big) out.push(`Biggest jump: ${esc(big.kind === 'power' || big.kind === 'hypercharge' || big.kind === 'buffie' ? big.label : `${KIND[big.kind]} ${big.label}`)}.`);
+
   return out.join(' ');
 }
+// Plain-word size of an upgrade's effect (the exact points are in the tooltip).
+const boost = (g) => (g >= 0.5 ? 'Big boost' : g >= 0.2 ? 'Good boost' : 'Small boost');
 const upOpen = new Set(); // brawler ids whose map list is open (kept when coming back)
 document.addEventListener('toggle', (e) => { const d = e.target; if (d.matches?.('details.up-maps[data-id]')) d.open ? upOpen.add(d.dataset.id) : upOpen.delete(d.dataset.id); }, true);
 function upCard(p, rank, maxGain, U) {
@@ -650,8 +656,8 @@ function upCard(p, rank, maxGain, U) {
       </div>
       ${upSteps(chain, p.from, p.to)}
       <p class="up-why">${upWhy(p.id, chain, p.from, p.to, U.maps)}</p>
-      <div class="up-impact"><span class="up-bar" aria-hidden="true"><i style="width:${Math.max(4, (100 * p.gain) / maxGain).toFixed(0)}%"></i></span><span class="up-gain" title="How much this raises your average top-3 pick across Ranked maps">+${p.gain.toFixed(2)} pts</span></div>
-      ${top.length ? `<details class="up-maps" data-id="${esc(p.id)}"${upOpen.has(String(p.id)) ? ' open' : ''}><summary>Maps where it's in your top 3</summary><ul>${top.map(([mi, r]) => { const m = U.maps[mi]; return `<li><a href="#m-${esc(m.id)}"><span class="dot" style="background:${esc(m.modeColor || '#888')}"></span><span class="mn">${esc(m.name)}</span><span class="r">#${r} for you</span></a></li>`; }).join('')}</ul></details>` : ''}
+      <div class="up-impact"><span class="up-bar" aria-hidden="true"><i style="width:${Math.max(4, (100 * p.gain) / maxGain).toFixed(0)}%"></i></span><span class="up-gain" title="+${p.gain.toFixed(2)} points to your average top-3 pick on Ranked maps">${boost(p.gain)}</span></div>
+      ${top.length ? `<details class="up-maps" data-id="${esc(p.id)}"${upOpen.has(String(p.id)) ? ' open' : ''}><summary>Where it helps</summary><ul>${top.map(([mi, r]) => { const m = U.maps[mi]; return `<li><a href="#m-${esc(m.id)}"><span class="dot" style="background:${esc(m.modeColor || '#888')}"></span><span class="mn">${esc(m.name)}</span><span class="r">${r === 1 ? 'Your best' : `Your #${r}`}</span></a></li>`; }).join('')}</ul></details>` : ''}
     </div>
   </li>`;
 }
@@ -670,7 +676,7 @@ function renderUpgrades() {
         <div class="up-field"><label for="upPP"><span class="pp"></span>Power points</label><input id="upPP" inputmode="numeric" autocomplete="off" placeholder="0" aria-describedby="upHint"></div>
         <div class="up-field"><label for="upCoins"><span class="coin"></span>Coins</label><input id="upCoins" inputmode="numeric" autocomplete="off" placeholder="0" aria-describedby="upHint"></div>
       </div>
-      <p class="up-hint" id="upHint">Your power points and coins are shown at the top of the game's home screen. The game doesn't share them, so type them in.</p>
+      <p class="up-hint" id="upHint">Shown at the top of the game's home screen.</p>
       <div class="up-presets" role="group" aria-label="Example amounts">${PRESETS.map(([l, c, p]) => `<button type="button" class="chip" data-c="${c}" data-p="${p}">${l}</button>`).join('')}</div>
     </form>
     <section class="up-summary" id="upSummary" aria-live="polite" aria-atomic="true"></section>
@@ -709,7 +715,7 @@ function upPlan(U) {
     // no amounts yet: show the best-value upgrades on the account
     const best = makePlan(U.chains, Infinity, Infinity, 5);
     const maxG = Math.max(0.01, ...best.list.map((x) => x.gain));
-    sum.innerHTML = `<p>Enter your power points and coins above, or tap an example amount, for a plan that fits what you have.</p>`;
+    sum.innerHTML = `<p>Add what you've saved, or tap an example, to get a plan that fits.</p>`;
     out.innerHTML = `<h2>Best value on your account <small>top 5</small></h2><ol class="up-list">${best.list.map((p, i) => upCard(p, i + 1, maxG, U)).join('')}</ol>`;
     return;
   }
@@ -721,11 +727,10 @@ function upPlan(U) {
   const maxG = Math.max(0.01, ...plan.list.map((x) => x.gain), ...later.map((x) => x.gain));
   const spentC = WALLET.c - plan.coinsLeft, spentP = WALLET.p - plan.ppLeft;
   sum.innerHTML = plan.list.length
-    ? `<p class="up-big">${plan.list.length} upgrade${plan.list.length > 1 ? 's' : ''} <span class="up-up">+${gain.toFixed(2)} pts</span></p>
-       <p>Your average top-3 pick on Ranked maps goes from <b class="num">${U.strength.toFixed(1)}</b> to <b class="num">${(U.strength + gain).toFixed(1)}</b>.</p>
+    ? `<p class="up-big" title="Your average top-3 pick on Ranked maps: ${U.strength.toFixed(1)} → ${(U.strength + gain).toFixed(1)}">${plan.list.length} upgrade${plan.list.length > 1 ? 's' : ''} for you <span class="up-up">${boost(gain)}</span></p>
        <div class="up-meter" aria-hidden="true"><i style="width:${WALLET.c ? ((100 * spentC) / WALLET.c).toFixed(0) : 0}%"></i></div>
-       <p class="up-spent">Uses ${n(spentP)} of ${n(WALLET.p)} power points and ${n(spentC)} of ${n(WALLET.c)} coins.</p>`
-    : `<p class="up-big">Nothing fits yet</p><p>The cheapest useful upgrade costs more than you have. Here's what's worth saving up for.</p>`;
+       <p class="up-spent">Uses ${n(spentP)} / ${n(WALLET.p)} power points · ${n(spentC)} / ${n(WALLET.c)} coins</p>`
+    : `<p class="up-big">Nothing fits yet</p><p>Here's what to save up for.</p>`;
   out.innerHTML = `${plan.list.length ? `<h2>Your plan <small>best value first</small></h2><ol class="up-list">${plan.list.map((p, i) => upCard(p, i + 1, maxG, U)).join('')}</ol>` : ''}
     ${later.length ? `<h2>Worth saving up for</h2><ul class="up-list later">${later.map((p) => upCard(p, 0, maxG, U)).join('')}</ul>` : ''}`;
 }
@@ -870,15 +875,15 @@ window.addEventListener('scroll', () => {
 // Label and target for the back link: the previous screen in this visit, or home.
 function backTarget() {
   const prev = nav[nav.length - 2]?.h;
-  if (!prev) return { label: 'All maps', inApp: false };
-  if (prev === '#' || prev === '') return { label: 'All maps', inApp: true };
+  if (!prev) return { label: 'Home', inApp: false };
+  if (prev === '#' || prev === '') return { label: 'Home', inApp: true };
   if (prev === '#upgrades') return { label: 'Upgrades', inApp: true };
   const b = prev.match(/^#b-(\d+)$/)?.[1];
   if (b && DATA.brawlers[b]) return { label: DATA.brawlers[b].n, inApp: true };
   const m = prev.match(/^#m-(.+)$/)?.[1];
   const mm = m && mapsById.get(decodeURIComponent(m));
   if (mm) return { label: mm.name, inApp: true };
-  return { label: 'All maps', inApp: false };
+  return { label: 'Home', inApp: false };
 }
 const backLink = () => `<a class="back" href="#" data-back>← ${esc(backTarget().label)}</a>`;
 function goBack() {
@@ -1010,6 +1015,7 @@ function maybeShowTip() {
   ok.addEventListener('click', () => { d.hidden = true; store.set('searchTipSeen', '1'); q.focus(); }, { once: true });
 }
 setTimeout(maybeShowTip, 1200);
-window.addEventListener('hashchange', () => { hidePop(); trackNav(); route(); });
+window.addEventListener('hashchange', () => { hidePop(false, true); trackNav(); route(); });
+window.addEventListener('popstate', () => { if (!history.state?.bpop) hidePop(true, true); });
 
 load();

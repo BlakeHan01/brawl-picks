@@ -114,18 +114,22 @@ async function dialogPattern(p, label, openSel, dialogSel) {
     await p.goto(BASE); await settle(p, 800);
     await p.fill('#q', rankedMap.name); await settle(p, 150); await p.keyboard.press('Enter'); await settle(p);
     check('Enter opens the map', (await hash(p)).startsWith('#m-'));
-    check('Map page: back link says "All maps"', (await p.textContent('#mapView .back')).includes('All maps'));
+    check('Map page: back link says "Home"', (await p.textContent('#mapView .back')).includes('Home'));
     await audit(p, 'Map page');
     await dialogPattern(p, 'Brawler card', '.top5 .bname >> nth=0', '#bpop');
     await p.click('#mapView .top5 .av.pop >> nth=1'); await settle(p, 200);
     check('Tapping a brawler picture opens its card', await visible(p, '#bpop'));
     await p.keyboard.press('Escape'); await settle(p, 150);
+    await p.click('#mapView .top5 .bname >> nth=0'); await settle(p, 200);
+    await p.goBack(); await settle(p);
+    check('Phone Back gesture closes the card and stays on the map', !(await visible(p, '#bpop')) && (await hash(p)) === `#m-${rankedMap.id}`);
     await p.click('.top5 .bname >> nth=0'); await settle(p, 200);
     await p.click('#bpop [data-frompop] >> nth=0'); await settle(p);
     check('Card: tapping a map opens it and closes the card', (await hash(p)).startsWith('#m-') && !(await visible(p, '#bpop')));
     await p.click('#mapView .back'); await settle(p);
     check('Back from that map returns to the first map with the card open again', (await hash(p)) === `#m-${rankedMap.id}` && await visible(p, '#bpop'));
     await p.keyboard.press('Escape'); await settle(p, 150);
+    check('Closing the card leaves you on the same map', (await hash(p)) === `#m-${rankedMap.id}` && !(await visible(p, '#bpop')));
     if (await p.locator('[data-view=combos]').count()) {
       await p.click('[data-view=combos]'); await settle(p, 200);
       await audit(p, 'Combos');
