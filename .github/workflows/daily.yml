@@ -71,6 +71,12 @@ jobs:
           PROFILE_LIMIT: ${{ inputs.profile_limit || 1500 }}
         run: node scripts/fetch-data.mjs
 
+      # CDN art is 4-10x larger than shown; shrink new images (also catches maps added by rotation runs).
+      - name: Shrink images
+        if: env.WANT_STATS == 'true'
+        continue-on-error: true
+        run: npm install --no-save --no-package-lock sharp@0.33.5 && node scripts/shrink-images.mjs
+
       - name: Save data
         id: commit
         run: |
@@ -88,7 +94,7 @@ jobs:
         if: steps.commit.outputs.deploy == 'true'
         run: |
           v=$(git rev-parse --short HEAD)
-          sed -i "s#href=\"style.css\"#href=\"style.css?v=$v\"#; s#src=\"app.js\"#src=\"app.js?v=$v\"#" site/index.html
+          sed -i "s#href=\"style.css\"#href=\"style.css?v=$v\"#; s#src=\"app.js\"#src=\"app.js?v=$v\"#; s#rel=\"modulepreload\" href=\"\([a-z-]*\)\.js\"#rel=\"modulepreload\" href=\"\1.js?v=$v\"#g" site/index.html
           sed -i "s#from '\./\([a-z-]*\)\.js'#from './\1.js?v=$v'#g" site/app.js
           grep -c "?v=$v" site/index.html site/app.js
 
