@@ -648,16 +648,24 @@ function upSteps(chain, from, to) {
   const out = [];
   let pw = null; // merge back-to-back power steps: "Power 8 → 11"
   const flush = () => { if (pw) { out.push(`<li class="up-step pw">Power <b>${pw[0]} → ${pw[1]}</b></li>`); pw = null; } };
+  let bf = null; // merge buffie steps: "2 Buffies · ~5 pulls"
+  const flushB = () => {
+    if (!bf) return;
+    const p = Math.round(bf.pulls);
+    out.push(`<li class="up-step" title="Claw Machine: every pull gives a random Buffie you don't have yet, from the 3 brawlers in that machine. About ${p} pull${p > 1 ? 's' : ''} on average (2,000 power points and 1,000 coins each); the other Buffies you get power up those brawlers.">${bf.n} Buffie${bf.n > 1 ? 's' : ''} <span class="k">· ~${p} pull${p > 1 ? 's' : ''}</span></li>`);
+    bf = null;
+  };
   for (const st of chain.slice(from, to + 1)) {
-    if (st.kind === 'power') { const [, a, b] = st.label.match(/(\d+)\D+(\d+)/); pw = pw ? [pw[0], b] : [a, b]; continue; }
+    if (st.kind === 'power') { flushB(); const [, a, b] = st.label.match(/(\d+)\D+(\d+)/); pw = pw ? [pw[0], b] : [a, b]; continue; }
     flush();
     const it = st.item != null && DATA.items?.[st.item];
     const icon = it?.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : '';
-    // buffies come from the Claw Machine: each pull gives a random one
-    if (st.kind === 'buffie') { out.push(`<li class="up-step" title="From the Claw Machine: 2,000 power points and 1,000 coins per pull, and the Buffie you get is random">${esc(st.label)} <span class="k">· random pull</span></li>`); continue; }
+    // buffies come from the Claw Machine: random, so back-to-back buffie steps merge into one chip
+    if (st.kind === 'buffie') { bf = bf ? { n: bf.n + 1, pulls: bf.pulls + st.pulls } : { n: 1, pulls: st.pulls }; continue; }
+    flushB();
     out.push(`<li class="up-step">${icon}${KIND[st.kind] ? `<span class="k">${KIND[st.kind]}</span> ${esc(st.label === KIND[st.kind] ? '' : st.label)}` : esc(st.label)}</li>`);
   }
-  flush();
+  flush(); flushB();
   return `<ul class="up-steps" aria-label="What to buy">${out.join('')}</ul>`;
 }
 // Plain-language reason, from where the brawler lands in your top 3 after the package.
@@ -722,7 +730,7 @@ function renderUpgrades() {
     <details class="legend"><summary>How are these picked?</summary>
       <p>For each current Ranked map, your Curated pick takes your brawlers at power 9 or higher and subtracts points for what's missing from their build. An upgrade is worth how much it raises your <b>top 3 picks</b>, averaged over all ${U.maps.length} Ranked maps, so a brawler that's strong on many maps and nearly finished comes first. Upgrades are grouped per brawler, because power 10 → 11 only pays off after the earlier steps.</p>
       <p>The plan takes the best value per coin that fits what you have, then the next, until nothing fits. A power point counts as half a coin when comparing value. ${(DATA.costs?.n ?? 0) >= 20000 ? 'The points each missing piece costs are measured from Ranked games.' : 'The points each missing piece costs are estimates until enough Ranked games are measured.'}</p>
-      <p>Prices: power 1 → 11 costs 3,740 power points and 7,765 coins in total; gadget 1,000 coins; star power 2,000; gear 1,000; hypercharge 5,000; buffie 2,000 power points and 1,000 coins per Claw Machine pull. The Buffie you get is random, so one can take more than one pull, and only some brawlers have Buffies.</p>
+      <p>Prices: power 1 → 11 costs 3,740 power points and 7,765 coins in total; gadget 1,000 coins; star power 2,000; gear 1,000; hypercharge 5,000; buffie: a Claw Machine pull (2,000 power points and 1,000 coins) gives a random Buffie you don't have yet from the machine's 3 brawlers, so we count the average number of pulls it takes (e.g. 2.5 per Buffie when all 9 are left). Only some brawlers have Buffies.</p>
     </details>`;
   const ci = $('#upCoins'), pi = $('#upPP');
   if (WALLET) { ci.value = n(WALLET.c); pi.value = n(WALLET.p); }

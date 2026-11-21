@@ -9,7 +9,14 @@ import { readiness, MIN_POWER } from './curate.js';
 
 // In-game prices. LEVEL[n] = [coins, power points] to go from power n-1 to n.
 export const LEVEL = { 2: [20, 20], 3: [35, 30], 4: [75, 50], 5: [140, 80], 6: [290, 130], 7: [480, 210], 8: [800, 340], 9: [1250, 550], 10: [1875, 890], 11: [2800, 1440] };
-export const PRICE = { gadget: 1000, starPower: 2000, gear: 1000, hypercharge: 5000, buffie: [1000, 2000] };
+export const PRICE = { gadget: 1000, starPower: 2000, gear: 1000, hypercharge: 5000, buffie: [1000, 2000] }; // buffie: per Claw Machine pull
+// Buffies come from the Claw Machine: one trio of brawlers per machine (9 Buffies), every pull gives
+// a random Buffie you don't own yet, all equally likely, no duplicates (Supercell support). The pull
+// order is a random shuffle, so with R Buffies left in the machine and m of them for this brawler,
+// each of the m arrives on average every (R + 1) / (m + 1) pulls. The API doesn't say which brawlers
+// share a machine, so we assume the other two still have all 6 of theirs left (the cautious case).
+export const MACHINE_OTHERS = 6;
+export const pullsPerBuffie = (missing, others = MACHINE_OTHERS) => (missing + others + 1) / (missing + 1);
 // When comparing value, a power point counts as half a coin (they are easier to get).
 export const PP_WEIGHT = 0.5;
 // An empty top-3 slot on a map counts as a weak pick.
@@ -40,8 +47,15 @@ export function upgradeSteps(own, build = {}, names = {}) {
     add('gear', nm(g, 'Gear'), PRICE.gear, 0, g, (x) => x.gears.push(g ?? -1 - x.gears.length));
   }
   if (!cur.hyperCharges.length) add('hypercharge', 'Hypercharge', PRICE.hypercharge, 0, null, (x) => x.hyperCharges.push(-1));
-  if (own.buffies) for (const [k, label] of [['gadget', 'Gadget buffie'], ['starPower', 'Star power buffie'], ['hyperCharge', 'Hypercharge buffie']]) {
-    if (!cur.buffies[k]) add('buffie', label, ...PRICE.buffie, null, (x) => { x.buffies[k] = true; });
+  if (own.buffies) {
+    const keys = ['gadget', 'starPower', 'hyperCharge'].filter((k) => !cur.buffies[k]);
+    const pulls = pullsPerBuffie(keys.length);
+    for (const k of keys) {
+      // which one you get is random, so each step is "one more Buffie" at the expected cost
+      const st = { pulls };
+      add('buffie', 'Buffie', Math.round(PRICE.buffie[0] * pulls), Math.round(PRICE.buffie[1] * pulls), null, (x) => { x.buffies[k] = true; });
+      Object.assign(out[out.length - 1], st);
+    }
   }
   return out;
 }

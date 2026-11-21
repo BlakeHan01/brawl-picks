@@ -28,9 +28,9 @@ test('steps come in buying order with the right prices and named items', () => {
     ['gear', 'Shield', 1000, 0],
     ['gear', 'Damage', 1000, 0],
     ['hypercharge', 'Hypercharge', 5000, 0],
-    ['buffie', 'Gadget buffie', 1000, 2000],
-    ['buffie', 'Star power buffie', 1000, 2000],
-    ['buffie', 'Hypercharge buffie', 1000, 2000],
+    ['buffie', 'Buffie', 2500, 5000], // 3 missing + 6 others left in the machine: 2.5 pulls each on average
+    ['buffie', 'Buffie', 2500, 5000],
+    ['buffie', 'Buffie', 2500, 5000],
   ]);
   assert.equal(s.at(-1).own.power, 11);
 });
@@ -71,4 +71,16 @@ test('a package only covers steps in order and never skips one', () => {
   const chain = [{ coins: 1000, pp: 0, gain: 0 }, { coins: 1000, pp: 0, gain: 2 }, { coins: 5000, pp: 0, gain: 0.1 }];
   assert.deepEqual([bestPackage(chain).from, bestPackage(chain).to], [0, 1]);
   assert.equal(bestPackage(chain, 0, 1500), null); // the first step alone gains nothing
+});
+
+import { pullsPerBuffie } from '../site/advisor.js';
+test('claw machine: expected pulls per wanted buffie (random order, no duplicates)', () => {
+  assert.equal(pullsPerBuffie(3, 6), 2.5); // 9 left, want 3 -> every 2.5 pulls
+  assert.equal(pullsPerBuffie(1, 6), 4); // 7 left, want the last one -> 4 pulls on average
+  assert.equal(pullsPerBuffie(1, 0), 1); // only one left: the next pull
+  // brute force check of (R+1)/(m+1): average position of the first wanted item in a shuffle
+  const R = 9, m = 3; let sum = 0, n = 0;
+  const perm = (a) => a.length ? a.flatMap((x, i) => perm([...a.slice(0, i), ...a.slice(i + 1)]).map((p) => [x, ...p])) : [[]];
+  for (const p of perm([...Array(R).keys()].slice(0, 7))) { sum += p.findIndex((x) => x < m) + 1; n++; } // 7 items, 3 wanted
+  assert.ok(Math.abs(sum / n - (7 + 1) / (3 + 1)) < 1e-9);
 });
