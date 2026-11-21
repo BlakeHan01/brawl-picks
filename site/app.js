@@ -653,6 +653,8 @@ function upSteps(chain, from, to) {
     flush();
     const it = st.item != null && DATA.items?.[st.item];
     const icon = it?.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : '';
+    // buffies come from the Claw Machine: each pull gives a random one
+    if (st.kind === 'buffie') { out.push(`<li class="up-step" title="From the Claw Machine: 2,000 power points and 1,000 coins per pull, and the Buffie you get is random">${esc(st.label)} <span class="k">· random pull</span></li>`); continue; }
     out.push(`<li class="up-step">${icon}${KIND[st.kind] ? `<span class="k">${KIND[st.kind]}</span> ${esc(st.label === KIND[st.kind] ? '' : st.label)}` : esc(st.label)}</li>`);
   }
   flush();
@@ -720,7 +722,7 @@ function renderUpgrades() {
     <details class="legend"><summary>How are these picked?</summary>
       <p>For each current Ranked map, your Curated pick takes your brawlers at power 9 or higher and subtracts points for what's missing from their build. An upgrade is worth how much it raises your <b>top 3 picks</b>, averaged over all ${U.maps.length} Ranked maps, so a brawler that's strong on many maps and nearly finished comes first. Upgrades are grouped per brawler, because power 10 → 11 only pays off after the earlier steps.</p>
       <p>The plan takes the best value per coin that fits what you have, then the next, until nothing fits. A power point counts as half a coin when comparing value. ${(DATA.costs?.n ?? 0) >= 20000 ? 'The points each missing piece costs are measured from Ranked games.' : 'The points each missing piece costs are estimates until enough Ranked games are measured.'}</p>
-      <p>Prices: power 1 → 11 costs 3,740 power points and 7,765 coins in total; gadget 1,000 coins; star power 2,000; gear 1,000; hypercharge 5,000; buffie 2,000 power points and 1,000 coins (only some brawlers have buffies).</p>
+      <p>Prices: power 1 → 11 costs 3,740 power points and 7,765 coins in total; gadget 1,000 coins; star power 2,000; gear 1,000; hypercharge 5,000; buffie 2,000 power points and 1,000 coins per Claw Machine pull. The Buffie you get is random, so one can take more than one pull, and only some brawlers have Buffies.</p>
     </details>`;
   const ci = $('#upCoins'), pi = $('#upPP');
   if (WALLET) { ci.value = n(WALLET.c); pi.value = n(WALLET.p); }
