@@ -304,7 +304,7 @@ test('end to end: stats + rotation from the mock API', async () => {
 });
 
 test('backfill files games by the day they were played', async () => {
-  const srv = mockApi({ spacingMin: 2 * 60 }).listen(0); // one game every 2 hours, 25 per player: ~2 days
+  const srv = mockApi({ spacingMin: 90 }).listen(0); // one game every 90 min, 25 per player: 37.5 h (always inside 3 calendar days, always crosses midnight)
   const dir = await mkdtemp(join(tmpdir(), 'bp-'));
   const daily = join(dir, 'daily');
   const env = { BS_API_BASE: `http://127.0.0.1:${srv.address().port}/v1`, BS_API_KEY: 'KEY', BS_REGIONS: 'global', CRAWL_LIMIT: '0', MIN_TROPHIES: '500', OUT: join(dir, 'data.json'), DAILY_DIR: daily, BACKFILL_DAYS: '3', BRAWLIFY_BASE: 'off' };
