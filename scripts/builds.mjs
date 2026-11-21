@@ -68,3 +68,110 @@ export function summarizeBuilds(list) {
   }
   return out;
 }
+
+// ---------- What missing build pieces cost (within-player comparison) ----------
+// For players whose profile AND battle log we read, each of their games gets the build of the
+// brawler they used: power (from the battle log), hypercharge, buffies, star power, gadget, gears
+// (from the profile). Comparing a player's games with each other (each player's own average win
+// rate is subtracted) removes "better players own more stuff". A linear model then gives how many
+// win-rate points each missing piece costs. Only the sums are stored, so days add up.
+export const EFFECTS = ['powerLevel', 'noHypercharge', 'buffieMissing', 'noStarPower', 'otherStarPower', 'noGadget', 'otherGadget', 'gearMissing'];
+const K = EFFECTS.length;
+export const blankEffects = () => ({ n: 0, players: 0, nz: Array(K).fill(0), xtx: Array(K * K).fill(0), xty: Array(K).fill(0) });
+
+// own: profile brawler; build: { sp, gad } summary (top choice + clear flag); power: from the battle.
+export function featuresFor(own, build = {}, power = own.power) {
+  const sp = own.starPowers?.map((x) => x.id ?? x) || [];
+  const gad = own.gadgets?.map((x) => x.id ?? x) || [];
+  const gears = own.gears?.length || 0;
+  const buffies = own.buffies ? 3 - ['gadget', 'starPower', 'hyperCharge'].filter((k) => own.buffies[k]).length : 0;
+  return [
+    Math.max(0, Math.min(2, 11 - power)),
+    own.hyperCharges?.length ? 0 : 1,
+    buffies,
+    sp.length ? 0 : 1,
+    sp.length && build.sp?.[3] && !sp.includes(build.sp[0]) ? 1 : 0, // owns only other star power(s)
+    gad.length ? 0 : 1,
+    gad.length && build.gad?.[3] && !gad.includes(build.gad[0]) ? 1 : 0,
+    Math.max(0, 2 - gears),
+  ];
+}
+
+const GAME_TYPES = new Set(['soloRanked', 'teamRanked', 'ranked']);
+export function tallyEffects(profiles, logsByTag, builds = {}, acc = blankEffects()) {
+  for (const pr of profiles) {
+    const log = pr?.tag && logsByTag.get(pr.tag);
+    if (!log) continue;
+    const owned = new Map((pr.brawlers || []).map((b) => [b.id, b]));
+    const rows = [];
+    for (const it of Array.isArray(log) ? log : log.items || []) {
+      const bt = it?.battle || {};
+      if (!GAME_TYPES.has(bt.type) || !Array.isArray(bt.teams)) continue;
+      if (bt.result !== 'victory' && bt.result !== 'defeat') continue;
+      const me = bt.teams.flat().find((p) => p?.tag === pr.tag);
+      const own = me && owned.get(me.brawler?.id);
+      const power = me?.brawler?.power;
+      if (!own || !(power >= 9)) continue;
+      rows.push({ x: featuresFor(own, builds[own.id], power), y: bt.result === 'victory' ? 1 : 0 });
+    }
+    if (rows.length < 2) continue;
+    const mx = Array(K).fill(0);
+    let my = 0;
+    for (const r of rows) { for (let k = 0; k < K; k++) mx[k] += r.x[k] / rows.length; my += r.y / rows.length; }
+    acc.players++;
+    for (const r of rows) {
+      acc.n++;
+      const d = r.x.map((v, k) => v - mx[k]);
+      for (let i = 0; i < K; i++) {
+        if (r.x[i]) acc.nz[i]++;
+        acc.xty[i] += d[i] * (r.y - my);
+        for (let j = 0; j < K; j++) acc.xtx[i * K + j] += d[i] * d[j];
+      }
+    }
+  }
+  return acc;
+}
+
+export function addEffects(into, from) {
+  if (!from) return into;
+  into.n += from.n; into.players += from.players;
+  for (let i = 0; i < K; i++) { into.nz[i] += from.nz[i]; into.xty[i] += from.xty[i]; }
+  for (let i = 0; i < K * K; i++) into.xtx[i] += from.xtx[i];
+  return into;
+}
+
+// Solve (X'X + ridge) b = X'y. Returns per piece: effect on win rate (points), its standard error,
+// and the penalty used: the cautious end of the estimate (effect + 1 SE, never below 0), so noisy
+// pieces cost little. Pieces seen in fewer than 30 games get no penalty.
+export function solveEffects(acc, ridge = 20) {
+  const A = acc.xtx.map((v, i) => v + (i % (K + 1) === 0 ? ridge : 0));
+  const inv = invert(A, K);
+  const beta = Array.from({ length: K }, (_, i) => inv.slice(i * K, i * K + K).reduce((s, v, j) => s + v * acc.xty[j], 0));
+  const out = { n: acc.n, players: acc.players, pieces: {} };
+  EFFECTS.forEach((name, i) => {
+    const se = Math.sqrt(0.25 * Math.max(0, inv[i * K + i]));
+    const effect = 100 * beta[i], seP = 100 * se;
+    const penalty = acc.nz[i] >= 30 ? Math.max(0, -(effect + seP)) : 0;
+    out.pieces[name] = { effect: round1(effect), se: round1(seP), penalty: round1(penalty), games: acc.nz[i] };
+  });
+  return out;
+}
+const round1 = (x) => Math.round(x * 10) / 10;
+
+function invert(A, n) {
+  const M = A.map((v) => v), I = Array.from({ length: n * n }, (_, i) => (i % (n + 1) === 0 ? 1 : 0));
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r * n + c]) > Math.abs(M[p * n + c])) p = r;
+    for (let k = 0; k < n; k++) { [M[c * n + k], M[p * n + k]] = [M[p * n + k], M[c * n + k]]; [I[c * n + k], I[p * n + k]] = [I[p * n + k], I[c * n + k]]; }
+    const d = M[c * n + c] || 1e-12;
+    for (let k = 0; k < n; k++) { M[c * n + k] /= d; I[c * n + k] /= d; }
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r * n + c];
+      if (!f) continue;
+      for (let k = 0; k < n; k++) { M[r * n + k] -= f * M[c * n + k]; I[r * n + k] -= f * I[c * n + k]; }
+    }
+  }
+  return I;
+}

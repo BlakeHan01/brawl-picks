@@ -1,7 +1,7 @@
 import { searchMaps, initials } from './search.js';
 import { API_BASE } from './config.js';
 import { modeName, modeColor, isSoloMode } from './modes.js';
-import { curate, normalizeTag } from './curate.js';
+import { curate, costsFrom, normalizeTag } from './curate.js';
 
 const $ = (s) => document.querySelector(s);
 const q = $('#q');
@@ -36,6 +36,8 @@ const ORDERS = {
 let PLAYER = null;
 try { PLAYER = JSON.parse(store.get('player') || 'null'); } catch {}
 let order = ORDERS[store.get('order')] ? store.get('order') : PLAYER ? 'curated' : 'score';
+// Map page view: single brawlers or best duos/trios.
+let view = store.get('view') === 'combos' ? 'combos' : 'brawlers';
 const rowsOf = (m) => m.rows || [];
 
 // ---------- time ----------
@@ -225,14 +227,14 @@ function build(id, small = false) {
     const it = I[itemId];
     if (!it?.img) return '';
     const t = `${tip}: ${it.n}`;
-    return `<span class="bi${close ? ' close' : ''}" tabindex="0" role="img" aria-label="${esc(t)}" data-tip="${esc(t)}"><img src="${esc(it.img)}" alt="" loading="lazy"></span>`;
+    return `<span class="bi${kind ? ` ${kind}` : ''}${close ? ' close' : ''}" tabindex="0" role="img" aria-label="${esc(t)}" data-tip="${esc(t)}"><img src="${esc(it.img)}" alt="" loading="lazy"></span>`;
   };
   const why = (x, what) => x[3]
     ? ` · ${Math.round(x[1])}% of ${x[2]} Legendary+ players ${what}`
     : ` · close call: ${Math.round(x[1])}% vs ${Math.round(x[4])}% of ${x[2]} Legendary+ players`;
   const parts = [];
-  if (b.sp) parts.push(icon(b.sp[0], 'Star power', !b.sp[3]).replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.sp, 'chose it first'))}"`));
-  if (b.gad) parts.push(icon(b.gad[0], 'Gadget', !b.gad[3]).replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.gad, 'chose it first'))}"`));
+  if (b.sp) parts.push(icon(b.sp[0], 'Star power', !b.sp[3], 'sp').replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.sp, 'chose it first'))}"`));
+  if (b.gad) parts.push(icon(b.gad[0], 'Gadget', !b.gad[3], 'gad').replace(/data-tip="([^"]*)"/, (m, t) => `data-tip="${t}${esc(why(b.gad, 'chose it first'))}"`));
   if (b.gear) {
     const names = b.gear[0].map((g) => I[g]?.n).filter(Boolean).join(' + ');
     for (const g of b.gear[0]) parts.push(icon(g, 'Gear', !b.gear[3]).replace(/data-tip="([^"]*)"/, () => `data-tip="${esc(`Gears: ${names}${why(b.gear, 'run this pair')}`)}"`));
@@ -273,6 +275,16 @@ function renderMap(m) {
       : `<p class="empty">Not enough high-skill games on this map yet. Picks appear once top players have played it ${n(15)}+ times.</p>`);
     return;
   }
+  const hasCombos = !!(m.combos?.duos?.length || m.combos?.trios?.length);
+  const viewBar = hasCombos ? `<div class="seg viewseg" role="group" aria-label="View">
+      <button data-view="brawlers" aria-pressed="${view !== 'combos'}">Brawlers</button>
+      <button data-view="combos" aria-pressed="${view === 'combos'}">Combos</button></div>` : '';
+  const bindView = () => mapView.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { view = b.dataset.view; store.set('view', view); renderMap(m); }));
+  if (hasCombos && view === 'combos') {
+    mapView.innerHTML = head + viewBar + renderCombos(m);
+    bindView();
+    return;
+  }
   const hasBans = rows.some((r) => r[5] > 0);
   const ord = order === 'banned' && !hasBans ? 'score' : order; // trophy-game maps have no bans
   const o = ORDERS[ord];
@@ -281,7 +293,7 @@ function renderMap(m) {
   let items;
   if (ord === 'curated') {
     const builds = Object.fromEntries(Object.entries(B).map(([id, b]) => [id, b.b]));
-    items = PLAYER ? curate(rows, PLAYER, builds).slice(0, 10).map((c) => ({ r: c.row, c })) : [];
+    items = PLAYER ? curate(rows, PLAYER, builds, costsFrom(DATA.costs)).slice(0, 10).map((c) => ({ r: c.row, c })) : [];
   } else {
     items = [...rows].sort((x, y) => y[o.col] - x[o.col] || y[1] - x[1]).slice(0, 20).map((r) => ({ r }));
   }
@@ -299,7 +311,7 @@ function renderMap(m) {
     hasBans && ord !== 'banned' ? `${pct(r[5])} banned` : null,
   ].filter(Boolean);
   const missing = (it, small) => (it.c?.missing.length
-    ? `<span class="miss${small ? ' sm' : ''}">${it.c.missing.map((t) => `<span>${esc(t)}</span>`).join('')}</span>`
+    ? `<span class="miss${small ? ' sm' : ''}">${it.c.missing.map((t) => `<span>${esc(t)}</span>`).join('')}${it.c.penalty ? `<span class="cost">−${it.c.penalty.toFixed(1)}</span>` : ''}</span>`
     : it.c ? `<span class="miss ok${small ? ' sm' : ''}"><span>Fully built</span></span>` : '');
   const main = Object.entries(ORDERS).filter(([k, v]) => !v.more && (k !== 'banned' || hasBans));
   const more = Object.entries(ORDERS).filter(([, v]) => v.more);
@@ -336,6 +348,7 @@ function renderMap(m) {
       </li>`).join('')}</ul>` : ''}`;
   }
   mapView.innerHTML = head + `
+    ${viewBar}
     ${m.low ? '<p class="warn">Few games on this map so far. Treat these picks as a rough guide.</p>' : ''}
     <div class="orderbar">
       <div class="seg small" role="group" aria-label="Sort by">
@@ -355,11 +368,40 @@ function renderMap(m) {
   $('#moreOrder').addEventListener('change', (e) => { if (e.target.value) setOrder(e.target.value); });
   $('#linkHere')?.addEventListener('click', openAcct);
   $('#changeAcct')?.addEventListener('click', (e) => { e.preventDefault(); openAcct(); });
+  bindView();
+}
+
+// Best duos and trios: [[ids], win %, games, synergy points].
+function renderCombos(m) {
+  const B = DATA.brawlers;
+  const mine = (ids) => PLAYER && ids.every((id) => PLAYER.brawlers.some((b) => b.id === id && b.power === 11));
+  const block = (title, list) => !list?.length ? '' : `
+    <h2>${title} <small>${list.length} best</small></h2>
+    <ol class="combos">${list.map(([ids, win, games, syn], i) => `
+      <li>
+        <span class="rk">${i + 1}</span>
+        <span class="cav">${ids.map((id) => av(id, 'sq')).join('')}</span>
+        <span class="cn"><b>${ids.map((id) => esc(B[id]?.n)).join(' + ')}</b>
+          <span>${n(games)} games${syn ? ` · <i class="${syn > 0 ? 'up' : 'down'}">${syn > 0 ? '+' : ''}${syn.toFixed(1)} together</i>` : ''}${mine(ids) ? ' · <i class="up">you have these</i>' : ''}</span></span>
+        <span class="wr ${win >= 55 ? 'hi' : ''}">${pct(win)}</span>
+      </li>`).join('')}</ol>`;
+  return `
+    ${block('Best duos', m.combos.duos)}
+    ${block('Best trios', m.combos.trios)}
+    <p class="legend"><b>Combos</b> are brawlers on the same team in ${m.basis === 'masters' || m.basis === 'legendary' || m.basis === 'ranked' ? 'Legendary+ Ranked' : 'high-trophy'} games on this map, last ${DATA.window?.days ?? 14} days. <b>Win %</b> is adjusted for skill and pulled toward 50% when there are few games, like single brawlers. <b>Together</b> is how much better (or worse) the combo did than its brawlers' own results add up to: a plus means they work well together.</p>`;
 }
 
 function legend(m, hasBans) {
   const ordNow = order === 'banned' && !hasBans ? 'score' : order;
-  if (ordNow === 'curated') return `<b>Curated pick</b> uses the brawlers you own: first the ones at power 11 and fully built (the star power and gadget skilled players pick, 2 gears, hypercharge, all buffies), then power 11 ones with something missing, then power 9–10 at the back. Within each group they're ordered by our score for this map.`;
+  if (ordNow === 'curated') {
+    const c = DATA.costs?.pieces;
+    const measured = c && DATA.costs.n >= 2000;
+    const fmt = (k, label) => (c?.[k]?.penalty ? `${label} −${c[k].penalty}` : null);
+    const list = measured ? [fmt('powerLevel', 'each power level below 11'), fmt('noHypercharge', 'no hypercharge'), fmt('buffieMissing', 'each missing buffie'), fmt('noStarPower', 'no star power'), fmt('otherStarPower', 'other star power'), fmt('noGadget', 'no gadget'), fmt('otherGadget', 'other gadget'), fmt('gearMissing', 'each missing gear')].filter(Boolean) : [];
+    return `<b>Curated pick</b> ranks the brawlers you own (power 9+) by our score for this map, minus what each missing piece costs. ${measured
+      ? `The costs are measured from ${DATA.costs.n.toLocaleString()} games of ${DATA.costs.players.toLocaleString()} Legendary+ players, comparing each player's games with and without the piece${list.length ? `: ${list.join(', ')} points` : ''}. Pieces that made no clear difference cost nothing.`
+      : 'Until enough games are measured, the costs are estimates.'}`;
+  }
   const skill = `Results are adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won (50% = average).`;
   if (ordNow === 'banned') return `<b>Most banned</b> orders brawlers by how often good players ban them on this map: the ones they least want to face, and the ones you're least likely to get. ${skill}`;
   if (ordNow === 'score') return `<b>Score</b> is our best guess at each brawler's win rate here. It starts from how often good players pick${hasBans ? ' or ban' : ''} it on this map and moves toward its actual results as games add up, with weights fitted from the data. ${skill}`;
