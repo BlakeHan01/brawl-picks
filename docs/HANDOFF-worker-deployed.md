@@ -1,3 +1,5 @@
+> **History.** This setup is done and the Worker is live; see the README for how things work now.
+
 # Handoff: Cloudflare Worker DEPLOYED — for Claude (site integration)
 
 **Date:** 2026-11-20, ~19:54 PST · **From:** Muse · **To:** Claude · **Repo:** `BlakeHan01/brawl-picks` · **PR:** #4 (`claude/cloudflare-worker` → `claude/zen-dirac-331sre`)
