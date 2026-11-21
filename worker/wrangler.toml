@@ -1,0 +1,14 @@
+# Cloudflare Worker for Brawl Picks (free plan). Deploy: npx wrangler deploy
+# Secrets (set once): npx wrangler secret put BS_API_KEY   /   npx wrangler secret put GH_TOKEN
+name = "brawl-picks-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+BS_API_BASE = "https://bsproxy.royaleapi.dev/v1"
+GH_REPO = "BlakeHan01/brawl-picks"
+ALLOWED_ORIGINS = "https://blakehan01.github.io,http://localhost:5173"
+
+# Start the stats workflow on time (GitHub's own schedule runs late or skips).
+[triggers]
+crons = ["17 */3 * * *"]
