@@ -58,7 +58,6 @@ export const MASTERS = 19;
 const MIN_MAP_BATTLES = 15; // fewer than this: map gets no picks
 const PREFER_RANKED = 40; // ranked-only stats once a map has this many ranked games
 const PREFER_LEGENDARY = 40; // new ranking: Legendary+ only from this many games
-const PREFER_MASTERS = 150; // new ranking: Masters+ only from this many games
 const LOW_SAMPLE = 150; // below this the site labels the picks "few games"
 const MIN_BRAWLER_GAMES = 10;
 const MAX_ROWS = 40; // brawlers kept per map
@@ -336,13 +335,14 @@ export function buildMaps(days, rankedPool) {
     }
   }
 
-  // Pick the games each map is ranked from: Masters+ when there are enough, else Legendary+,
+  // Pick the games each map is ranked from: Legendary+ when there are enough,
   // else all Ranked, else Ranked + high-trophy games together (specialty maps: trophy games).
   const chosen = [];
   for (const m of sum.values()) {
     let basis, a;
-    if (m.rM.n >= PREFER_MASTERS) { basis = 'masters'; a = m.rM; }
-    else if (m.rL.n >= PREFER_LEGENDARY) { basis = 'legendary'; a = m.rL; }
+    // Legendary+ for every map that has enough of those games; Masters+ alone is still too few
+    // games for steady numbers (it's still counted, as mastersGames, for reference).
+    if (m.rL.n >= PREFER_LEGENDARY) { basis = 'legendary'; a = m.rL; }
     else if (m.r.n >= PREFER_RANKED) { basis = 'ranked'; a = m.r; }
     else { basis = m.r.n ? 'mixed' : 'trophy'; a = merged(m.r, m.t); }
     if (a.n < MIN_MAP_BATTLES) continue;

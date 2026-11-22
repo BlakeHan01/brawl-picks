@@ -174,13 +174,13 @@ test('crawl picks Legendary+ players met in Ranked games', () => {
   assert.equal(crawlTags([{ items }], new Set(), 2).length, 2);
 });
 
-test('Masters+ once a map has 150 Masters+ games', () => {
+test('Legendary+ even when a map has plenty of Masters+ games (Masters+ alone is too few)', () => {
   const items = [];
-  for (let i = 0; i < 200; i++) items.push(battle('#P1', i, { trophies: 20, win: i % 2 === 0 }));
+  for (let i = 0; i < 200; i++) items.push(battle('#P1', i, { trophies: i < 150 ? 20 : 17, win: i % 2 === 0 }));
   const { maps: [m] } = buildMaps([tally([{ items }], ['#P1'], 0)], new Set());
-  assert.equal(m.basis, 'masters');
-  assert.equal(m.sample, 200);
-  assert.equal(m.mastersGames, 200);
+  assert.equal(m.basis, 'legendary');
+  assert.equal(m.sample, 200); // all Legendary+ games, Masters+ included
+  assert.equal(m.mastersGames, 150);
 });
 
 test('builds: first choice when one is owned, gear pair when two are owned', () => {

@@ -141,7 +141,7 @@ function tick() {
 
 function renderFoot() {
   const parts = [];
-  if (DATA.generatedAt) parts.push(`<span title="${(DATA.battles?.legendary ?? 0).toLocaleString()} Legendary+ and ${(DATA.battles?.masters ?? 0).toLocaleString()} Masters+ Ranked games, plus ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games">Updated ${esc(new Date(DATA.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} · ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked games, last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}</span>`);
+  if (DATA.generatedAt) parts.push(`<span title="${(DATA.battles?.legendary ?? 0).toLocaleString()} Legendary+ Ranked games, plus ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games for special-event maps">Updated ${esc(new Date(DATA.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} · ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked games, last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}</span>`);
   if (ROT.fetchedAt) parts.push(ROT.live ? 'timers live' : `timers checked ${ago(ROT.fetchedAt)}`);
   $('#foot').innerHTML = `${parts.join(' · ')}<br>Images from <a href="https://brawlify.com" rel="noopener">Brawlify</a>. Not affiliated with, endorsed or sponsored by Supercell.`;
 }
@@ -316,7 +316,7 @@ const n = (x) => Number(x).toLocaleString();
 function basisText(m) {
   const d = DATA.window?.days ?? 14;
   const days = d === 1 ? 'last day' : `last ${d} days`;
-  const who = { masters: 'Masters+ Ranked', legendary: 'Legendary+ Ranked', ranked: 'top-player Ranked', mixed: 'top-player' }[m.basis] || `${n(DATA.minTrophies ?? 750)}+ trophy`;
+  const who = { masters: 'Legendary+ Ranked', legendary: 'Legendary+ Ranked', ranked: 'top-player Ranked', mixed: 'top-player' }[m.basis] || `${n(DATA.minTrophies ?? 750)}+ trophy`;
   return `<b>${n(m.sample)}</b> ${who} games · ${days}`;
 }
 
