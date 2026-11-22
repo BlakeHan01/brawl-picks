@@ -487,7 +487,10 @@ async function main() {
   // from Brawlify's API when it answers (it blocks some datacenter IPs, so this is best effort).
   // The saved copy (data/, on the data branch) wins; scripts/brawler-classes.json is the seed.
   const classFile = resolve(ROOT, process.env.CLASS_FILE || 'data/brawler-classes.json');
-  const classes = (await readJSON(classFile)) || (await readJSON(resolve(ROOT, 'scripts/brawler-classes.json'))) || { classes: {} };
+  const seed = (await readJSON(resolve(ROOT, 'scripts/brawler-classes.json'))) || { classes: {} };
+  const classes = (await readJSON(classFile)) || { classes: {} };
+  // the seed fills gaps (new brawlers): Brawlify blocks the runners, so the saved copy never learns them
+  for (const [id, c] of Object.entries(seed.classes)) if (!classes.classes[id]) classes.classes[id] = c;
   if (BRAWLIFY !== 'off') {
     try {
       const j = await getJSON(`${BRAWLIFY}/brawlers`, {}, 1);
@@ -505,6 +508,9 @@ async function main() {
       log('brawler classes: Brawlify unavailable, using saved file');
     }
   }
+
+  const noClass = Object.keys(brawlers).filter((id) => !classes.classes[id]).map((id) => brawlers[id].n);
+  if (noClass.length) log(`warn: no class for ${noClass.join(', ')}; add them to scripts/brawler-classes.json`);
 
   const used = new Set(maps.flatMap((m) => [...m.rows.map((p) => p[0]), ...['duos', 'trios'].flatMap((k) => (m.combos?.[k] || []).flatMap((c) => c[0]))]));
   const B = {};
