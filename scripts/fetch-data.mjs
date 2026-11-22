@@ -35,9 +35,10 @@ import { readFile, writeFile, mkdir, readdir, unlink } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import {
   ROOT, BS_KEY, log, official, getJSON, pool, listOf, parseTime, titleCase, nameKey,
-  modeName, modeColor, RANKED_MODES, ensureImage,
+  modeName, modeColor, RANKED_MODES, ensureImage, getText
 } from './lib.mjs';
 import { blankBuilds, tallyBuilds, summarizeBuilds, buffyBrawlers, blankEffects, tallyEffects, addEffects, solveEffects } from './builds.mjs';
+import { fetchPages, recentChanges, fetchOfficial, mergeChanges, resetsFrom } from './balance.mjs';
 
 const PLAYER_LIMIT = Number(process.env.BS_PLAYER_LIMIT || 200);
 const REGIONS = (process.env.BS_REGIONS || 'global,us,kr,br,de,jp,mx,fr').split(',').map((s) => s.trim()).filter(Boolean);
@@ -237,6 +238,31 @@ export function scoreRows(rows, scoreModel, winModel) {
       win: (0.5 * r.g + r.excess + winModel.K * 0.5) / (r.g + winModel.K),
     };
   }).sort((x, y) => y.score - x.score);
+}
+
+// Balance changes: a brawler changed in the window only counts games after the change (the patch
+// day is mixed, so it's dropped too). With fewer than MIN_DAYS_AFTER days of fresh games it's left
+// out of the rankings entirely: steady data over a guess. Day files on disk stay untouched.
+export const MIN_DAYS_AFTER = 3;
+export function applyResets(days, resets, minDays = MIN_DAYS_AFTER) {
+  const hidden = new Set();
+  const cut = new Map(Object.entries(resets).map(([id, d]) => [Number(id), d]));
+  for (const [id, d] of cut) if (days.filter((x) => x.date > d).length < minDays) hidden.add(id);
+  if (!cut.size) return { days, hidden };
+  const strip = (g, ids) => {
+    if (!g) return g;
+    const b = { ...g.b }, bans = { ...(g.bans || {}) };
+    for (const id of ids) { delete b[id]; delete bans[id]; }
+    let c = g.c;
+    if (c) c = Object.fromEntries(Object.entries(c).filter(([k]) => !k.split('.').some((o) => ids.has(Number(o) + 16000000))));
+    return { ...g, b, bans, ...(c ? { c } : {}) };
+  };
+  const out = days.map((day) => {
+    const ids = new Set([...cut].filter(([id, d]) => hidden.has(id) || day.date <= d).map(([id]) => id));
+    if (!ids.size) return day;
+    return { ...day, maps: Object.fromEntries(Object.entries(day.maps || {}).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).map(([gk, g]) => [gk, GROUPS.includes(gk) ? strip(g, ids) : g]))])) };
+  });
+  return { days: out, hidden };
 }
 
 function add(into, from) {
@@ -472,7 +498,28 @@ async function main() {
   const files = (await readdir(DAILY_DIR)).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
   const keep = files.slice(-WINDOW_DAYS);
   for (const f of files.slice(0, -WINDOW_DAYS)) await unlink(join(DAILY_DIR, f));
-  const days = (await Promise.all(keep.map((f) => readJSON(join(DAILY_DIR, f))))).filter(Boolean);
+  const rawDays = (await Promise.all(keep.map((f) => readJSON(join(DAILY_DIR, f))))).filter(Boolean);
+  rawDays.forEach((d, i) => { d.date ||= keep[i].slice(0, 10); });
+
+  // Recent balance changes: official release notes first, Liquipedia for anything they miss.
+  // Fetched at most once a day (data/balance.json); a failed fetch keeps the saved copy.
+  const balFile = resolve(ROOT, 'data/balance.json');
+  let bal = (await readJSON(balFile)) || { fetchedAt: null, official: [], liquipedia: [] };
+  if (process.env.BALANCE !== 'off' && !(Date.now() - Date.parse(bal.fetchedAt || 0) < 20 * 3600e3)) {
+    const names = Object.fromEntries(Object.entries(brawlers).map(([id, b]) => [id, b.n]));
+    const next = { ...bal, fetchedAt: new Date().toISOString() };
+    try { next.official = await fetchOfficial((u) => getText(u), names); } catch (e) { log('balance: official notes unavailable:', e.message); }
+    try { next.liquipedia = recentChanges(await fetchPages(names, (u, h) => getJSON(u, h)), date, 45); } catch (e) { log('balance: Liquipedia unavailable:', e.message); }
+    bal = next;
+    await mkdir(dirname(balFile), { recursive: true });
+    await writeFile(balFile, JSON.stringify(bal));
+  }
+  const winStart = new Date(Date.parse(date) - (WINDOW_DAYS - 1) * 864e5).toISOString().slice(0, 10);
+  const updates = mergeChanges(bal.official || [], bal.liquipedia || []).filter((c) => c.date >= winStart && c.date <= date && brawlers[c.id]);
+  const resets = resetsFrom(updates);
+  const { days, hidden } = applyResets(rawDays, resets);
+  log(`balance: ${updates.length} changes in the window; reset ${Object.keys(resets).length} brawlers, ${hidden.size} hidden until they have ${MIN_DAYS_AFTER} days of fresh games`);
+
   const { maps, model } = buildMaps(days, rankedPool);
   const count = (k) => maps.filter((m) => m.basis === k).length;
   log(`maps with picks: ${maps.length}; Masters+ ${count('masters')}, Legendary+ ${count('legendary')}, all Ranked ${count('ranked')}, other ${count('mixed') + count('trophy')}`);
@@ -512,7 +559,8 @@ async function main() {
   const noClass = Object.keys(brawlers).filter((id) => !classes.classes[id]).map((id) => brawlers[id].n);
   if (noClass.length) log(`warn: no class for ${noClass.join(', ')}; add them to scripts/brawler-classes.json`);
 
-  const used = new Set(maps.flatMap((m) => [...m.rows.map((p) => p[0]), ...['duos', 'trios'].flatMap((k) => (m.combos?.[k] || []).flatMap((c) => c[0]))]));
+  const inMaps = maps.flatMap((m) => [...m.rows.map((p) => p[0]), ...['duos', 'trios'].flatMap((k) => (m.combos?.[k] || []).flatMap((c) => c[0]))]);
+  const used = new Set([...updates.map((c) => c.id), ...inMaps]); // changed brawlers need names/images for the Updates page
   const B = {};
   await pool([...used], 8, async (id) => {
     if (!brawlers[id]) return;
@@ -553,6 +601,9 @@ async function main() {
     costs,
     notInRanked,
     buffies, // brawler ids that have buffies in the game
+    // last 14 days of balance changes (newest first) and which brawlers' games restart after one
+    updates: updates.map(({ id, date, kind, buffs, nerfs, reworks, reason, lines, source, url }) => ({ id, date, kind, buffs, nerfs, reworks, reason: reason || '', lines: lines.slice(0, 12), source, url })),
+    resets: Object.fromEntries(Object.entries(resets).map(([id, d]) => [id, { after: d, hidden: hidden.has(Number(id)), freshDays: days.filter((x) => x.date > d).length }])),
     items,
     brawlers: B,
     maps,

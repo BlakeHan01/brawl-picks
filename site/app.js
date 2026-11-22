@@ -523,6 +523,81 @@ const statTiles = (st) => {
   return `<div class="bp-tiles" title="Legendary+ Ranked games, last ${DATA.window?.days ?? 14} days">${tile(st.win, 'Win')}${tile(st.pick, 'Picked')}${tile(st.ban, 'Banned')}</div>`;
 };
 
+// ---------- balance changes (last 14 days, from Supercell's release notes and Liquipedia) ----------
+const shortDate = (iso) => new Date(iso + 'T12:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const plusDays = (iso, n) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+// One word for a change: what a player wants to know first
+function verdict(u) {
+  if (u.kind === 'new') return ['new', 'New'];
+  if (u.reworks) return ['rework', 'Reworked'];
+  if (u.buffs && u.nerfs) return ['mixed', 'Mixed'];
+  if (u.buffs) return ['buff', 'Buffed'];
+  if (u.nerfs) return ['nerf', 'Nerfed'];
+  return ['mixed', 'Changed'];
+}
+// How the change affects our picks for that brawler
+function resetNote(id) {
+  const r = DATA.resets?.[id];
+  if (!r) return '';
+  return r.hidden
+    ? `Left out of picks until it has 3 days of games since the change (from ${shortDate(plusDays(r.after, 4))})`
+    : `Picks use games since ${shortDate(plusDays(r.after, 1))} only`;
+}
+let updTab = 'major';
+function renderUpdates() {
+  const U = DATA.updates || [];
+  const major = U.filter((u) => u.kind !== 'minor'), minor = U.filter((u) => u.kind === 'minor');
+  if (updTab === 'major' && !major.length && minor.length) updTab = 'minor';
+  const list = updTab === 'major' ? major : minor;
+  const byDate = {};
+  for (const u of list) (byDate[u.date] ||= []).push(u);
+  const mark = { buff: '▲', nerf: '▼', neutral: '•', rework: '↻', added: '+' };
+  mapView.innerHTML = `
+    ${backLink()}
+    <h1 class="upd-h1">Balance changes</h1>
+    <p class="up-lede">Last 14 days. Picks for a changed brawler only count games played after the change.</p>
+    ${U.length ? `<div class="seg" role="tablist" aria-label="Size of change">
+      <button role="tab" id="updTabMajor" aria-selected="${updTab === 'major'}" aria-controls="updList" data-tab="major">Major <small>${major.length}</small></button>
+      <button role="tab" id="updTabMinor" aria-selected="${updTab === 'minor'}" aria-controls="updList" data-tab="minor">Minor <small>${minor.length}</small></button></div>` : ''}
+    <div id="updList" role="tabpanel" aria-labelledby="${updTab === 'major' ? 'updTabMajor' : 'updTabMinor'}">
+    ${!U.length ? '<p class="empty">No balance changes in the last 14 days.</p>'
+      : !list.length ? `<p class="empty">No ${updTab} changes in the last 14 days.</p>`
+      : Object.entries(byDate).map(([d, us]) => `<h2>${esc(shortDate(d))} <small>${us.length} brawler${us.length > 1 ? 's' : ''}</small></h2>
+        <ol class="upd-list">${us.map((u) => {
+          const b = DATA.brawlers[u.id] || { n: '?' }, [vk, vt] = verdict(u);
+          return `<li class="upd">
+            ${av(u.id, 'sq upd-av', true)}
+            <div class="upd-main">
+              <div class="upd-head"><h3><button class="bname" type="button" data-bpop="${esc(u.id)}">${esc(b.n)}</button></h3><span class="vchip ${vk}">${vt}</span></div>
+              ${u.reason ? `<p class="upd-why">${esc(u.reason)}</p>` : ''}
+              <ul class="upd-lines">${u.lines.map((l) => `<li class="${esc(l.type)}"><span class="mk" aria-hidden="true">${mark[l.type] || '•'}</span><span class="sr">${esc(l.type)}: </span>${esc(l.text)}</li>`).join('')}</ul>
+              ${resetNote(u.id) ? `<p class="upd-reset">${esc(resetNote(u.id))}</p>` : ''}
+            </div></li>`;
+        }).join('')}</ol>`).join('')}
+    </div>
+    <p class="upd-src">From <a href="https://supercell.com/brawlstars/en/blog/" rel="noopener">Supercell's release notes</a>${U.some((u) => u.source === 'liquipedia') ? ' and <a href="https://liquipedia.net/brawlstars/" rel="noopener">Liquipedia</a> (CC BY-SA)' : ''}.</p>`;
+  mapView.querySelectorAll('[data-tab]').forEach((t) => t.addEventListener('click', () => { updTab = t.dataset.tab; renderUpdates(); $(`[data-tab="${updTab}"]`)?.focus(); }));
+  mapView.querySelector('[role="tablist"]')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    updTab = updTab === 'major' ? 'minor' : 'major'; renderUpdates(); $(`[data-tab="${updTab}"]`)?.focus();
+  });
+}
+// Brawler page / card: "Nerfed Nov 11 · picks use games since Nov 12", linking to the details
+function changedNote(id) {
+  const u = (DATA.updates || []).find((x) => String(x.id) === String(id));
+  if (!u) return '';
+  const [vk, vt] = verdict(u);
+  return `<a class="changed ${vk}" href="#updates"><span class="vchip ${vk}">${vt} ${esc(shortDate(u.date))}</span><span>${esc(resetNote(id))}</span></a>`;
+}
+// Home: one line when something changed recently
+function renderUpdBanner() {
+  const U = DATA.updates || [], el = $('#updBanner');
+  if (!U.length) { el.hidden = true; return; }
+  const last = U[0].date, n = new Set(U.filter((u) => u.date === last).map((u) => u.id)).size;
+  el.innerHTML = `<span class="ub-ic" aria-hidden="true">⚖</span><span><b>Balance changes ${esc(shortDate(last))}</b> · ${n} brawler${n > 1 ? 's' : ''}${U.length > n ? ` (${U.length} in the last 14 days)` : ''}</span><span class="ub-go" aria-hidden="true">›</span>`;
+  el.hidden = false;
+}
+
 // ---------- brawler card: tap a brawler's name anywhere for a quick look (modal dialog) ----------
 let popOpener = null, popId = null;
 function openPop(id, e) {
@@ -539,6 +614,7 @@ function openPop(id, e) {
       <div><h2 id="bpopTitle">${esc(b.n)}</h2><p class="bp-cls">${cls(id)}${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}</p></div>
       <button class="bpop-x" type="button" aria-label="Close">✕</button>
     </div>
+    ${changedNote(id)}
     ${statTiles(st)}
     ${b.b ? `<div class="bp-build">${build(id, false, own || null, 'all')}</div>` : ''}
     ${yoursLine(id)}
@@ -585,6 +661,7 @@ function renderBrawler(id) {
       ${av(id, 'sq bp-av')}
       <div><h1>${esc(b.n)}</h1><p class="bp-cls">${cls(id)}${notRanked(id) ? '<span class="nr">Not in Ranked</span>' : ''}</p></div>
     </div>
+    ${changedNote(id)}
     ${statTiles(st)}
     ${b.b ? `<h2>Best build</h2>${buildRows(id, own || null)}` : ''}
     ${you}
@@ -937,6 +1014,7 @@ function backTarget() {
   if (!prev) return { label: 'Home', inApp: false };
   if (prev === '#' || prev === '') return { label: 'Home', inApp: true };
   if (prev === '#upgrades') return { label: 'Upgrades', inApp: true };
+  if (prev === '#updates') return { label: 'Balance changes', inApp: true };
   const b = prev.match(/^#b-(\d+)$/)?.[1];
   if (b && DATA.brawlers[b]) return { label: DATA.brawlers[b].n, inApp: true };
   const m = prev.match(/^#m-(.+)$/)?.[1];
@@ -970,7 +1048,8 @@ function route() {
   const map = id && mapsById.get(id);
   const bid = location.hash.match(/^#b-(\d+)$/)?.[1];
   upView.hidden = true;
-  const onUp = location.hash === '#upgrades';
+  const onUp = location.hash === '#upgrades', onUpd = location.hash === '#updates';
+  if (onUpd) $('#updLink').setAttribute('aria-current', 'page'); else $('#updLink').removeAttribute('aria-current');
   if (onUp) $('#upLink').setAttribute('aria-current', 'page'); else $('#upLink').removeAttribute('aria-current');
   if (onUp) {
     renderUpgrades();
@@ -978,6 +1057,11 @@ function route() {
     mapView.hidden = true;
     searchView.hidden = true;
     document.title = 'Upgrades · Brawl Picks';
+  } else if (onUpd) {
+    renderUpdates();
+    mapView.hidden = false;
+    searchView.hidden = true;
+    document.title = 'Balance changes · Brawl Picks';
   } else if (bid && DATA.brawlers[bid]) {
     if (bid !== lastBrawler) { bShowAll = false; lastBrawler = bid; }
     renderBrawler(bid);
@@ -994,6 +1078,7 @@ function route() {
     searchView.hidden = false;
     document.title = 'Brawl Picks';
     renderLive();
+    renderUpdBanner();
     renderResults();
     if (matchMedia('(pointer: fine)').matches && scrollTo === 0 && !reopen) q.focus({ preventScroll: true });
   }

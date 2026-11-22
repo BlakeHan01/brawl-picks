@@ -553,3 +553,43 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
 .switch[aria-checked="true"] .knob { background: color-mix(in srgb, var(--good) 35%, transparent); }
 .switch[aria-checked="true"] .knob::after { transform: translateX(14px); background: var(--good); }
 @media (prefers-reduced-motion: reduce) { .switch .knob, .switch .knob::after { transition: none; } }
+
+/* ---- balance changes ---- */
+.upd-h1 { font: 400 32px/1.05 var(--f-display); margin: 4px 0 6px; }
+.seg[role="tablist"] button small { font-weight: 600; margin-left: 2px; }
+.seg[role="tablist"] button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.upd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.upd { background: var(--panel); border-radius: var(--r); padding: 14px; display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; align-items: start; }
+.upd .av.upd-av { width: 52px; height: 52px; border-radius: 12px; background: transparent; }
+.upd-main { display: grid; gap: 6px; min-width: 0; }
+.upd-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.upd-head h3 { margin: 0; font: 400 20px/1.1 var(--f-display); }
+.vchip { font: 800 11px var(--f-body); letter-spacing: .04em; text-transform: uppercase; border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+.vchip.nerf { color: #ff9c9c; background: color-mix(in srgb, #ff6b6b 16%, transparent); }
+.vchip.buff { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.vchip.mixed { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.vchip.rework { color: #d4a8ff; background: color-mix(in srgb, #b07cff 18%, transparent); }
+.vchip.new { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.upd-why { margin: 0; color: var(--dim); font-size: 13.5px; font-style: italic; max-width: 64ch; }
+.upd-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.upd-lines li { display: flex; gap: 8px; align-items: baseline; }
+.upd-lines .mk { flex: none; width: 14px; text-align: center; font-size: 11px; }
+.upd-lines .buff .mk { color: var(--good); } .upd-lines .nerf .mk { color: #ff8a8a; } .upd-lines .neutral .mk, .upd-lines .rework .mk, .upd-lines .added .mk { color: var(--dim); }
+.upd-reset { margin: 2px 0 0; font-size: 12.5px; color: var(--dim); border-top: 1px solid var(--line); padding-top: 6px; }
+.upd-src { color: var(--dim); font-size: 12px; margin-top: 18px; }
+.upd-src a { color: var(--dim); }
+.updbanner { display: flex; align-items: center; gap: 10px; margin: 4px 0 14px; padding: 10px 14px; min-height: 48px; background: var(--panel); border: 2px solid var(--line); border-radius: var(--r); color: var(--text); text-decoration: none; font-size: 13.5px; }
+.updbanner:hover { border-color: var(--accent); }
+.updbanner[hidden] { display: none; }
+.updbanner .ub-ic { font-size: 18px; } .updbanner span:nth-child(2) { flex: 1; min-width: 0; } .updbanner .ub-go { color: var(--dim); font-size: 20px; }
+.changed { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; padding: 8px 10px; border-radius: 10px; background: var(--panel); color: var(--dim); font-size: 12.5px; text-decoration: none; }
+.changed:hover { color: var(--text); }
+.bpop-in .changed { margin: 0; background: var(--bg); }
+@media (max-width: 400px) { .navlink { padding: 0 6px; font-size: 12.5px; } }
+/* very narrow phones: logo, two nav links and the account button share one row */
+@media (max-width: 360px) {
+  .logo { font-size: 21px; }
+  .hnav { gap: 2px; }
+  .navlink { padding: 0 5px; font-size: 12px; }
+  .acct { max-width: 26vw; padding: 6px 9px; }
+}

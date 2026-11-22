@@ -182,6 +182,23 @@ async function dialogPattern(p, label, openSel, dialogSel) {
     await p.goto(BASE + '#b-99999999'); await settle(p);
     check('Unknown link falls back to home', await visible(p, '#searchView'));
 
+    // ===== 3b. Balance changes =====
+    if ((DATA.updates || []).length) {
+      await p.goto(BASE); await settle(p, 800);
+      check('Home shows the balance changes banner', await visible(p, '#updBanner'));
+      await p.click('#updBanner'); await settle(p);
+      check('Banner opens Balance changes', (await hash(p)) === '#updates' && (await p.textContent('#mapView h1')) === 'Balance changes');
+      check('Major / Minor tabs: one selected, entries shown', await p.evaluate(() => document.querySelectorAll('[role=tab][aria-selected=true]').length === 1 && document.querySelectorAll('.upd').length > 0));
+      await audit(p, 'Balance changes');
+      await p.focus('[role=tab][aria-selected=true]'); await p.keyboard.press('ArrowRight'); await settle(p, 150);
+      check('Arrow keys switch tabs', await p.evaluate(() => document.activeElement.getAttribute('role') === 'tab' && document.activeElement.getAttribute('aria-selected') === 'true'));
+      await p.click('.upd .bname >> nth=0'); await settle(p, 200);
+      check('Tapping a changed brawler opens its card with the change noted', await visible(p, '#bpop') && await p.evaluate(() => !!document.querySelector('#bpop .changed')));
+      await p.keyboard.press('Escape'); await settle(p, 150);
+      await p.click('#mapView .back'); await settle(p);
+      check('Back from Balance changes goes home', await visible(p, '#searchView'));
+    }
+
     // ===== 4. Account dialog =====
     await p.goto(BASE + `#m-${rankedMap.id}`); await settle(p, 800);
     await p.evaluate(() => localStorage.setItem('order', 'curated')); await p.reload(); await settle(p, 800);
