@@ -104,6 +104,10 @@ export function htmlLines(html) {
 
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 const toDate = (month, day, year) => `${year}-${String(MONTHS.indexOf(month.toLowerCase()) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+// what a change line reads like: a number, or a word saying what moved
+const CHANGE_LIKE = /\d|increas|reduc|decreas|\bnow\b|no longer|removed|added|\bchanged\b|updated|rework|replaced|matches|can now|cannot|faster|slower|longer|shorter|consumes|grants|lasts/i;
+// spellings seen in Supercell's notes -> the game's name (both as keyOf keys)
+const SPELLINGS = { grey: 'gray', mrp: 'mrp', larrylawrie: 'larrylawrie', larryandlawrie: 'larrylawrie', jaeyong: 'jaeyong', rt: 'rt' };
 const keyOf = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // One bullet -> 'buff' | 'nerf' | 'neutral', from what changed and which way.
@@ -121,30 +125,79 @@ export function direction(text) {
 }
 
 // lines of one post, brawler names { id: name } -> [{ id, date, reason, lines: [{ type, text }] }]
+// The layout varies between posts, so this is deliberately loose:
+//   date:      "MAINTENANCE - NOVEMBER 11", "Maintenance - September 16th", "Maintenance - July 8"
+//   section:   "BALANCE CHANGES", "Balance Changes:", "GENERAL BALANCE CHANGES" (mode-specific
+//              sections like "NANOPOWER BALANCE CHANGES" are skipped); ends at "Bug Fixes" etc.
+//   sub-heads: "BUFFS" / "NERFS" (Supercell's own label wins over the wording of a line)
+//   brawler:   a line that is just the name ("CROW" or "Crow"); its lines follow, with or without
+//              "•". In the bullet style, the first plain line is the reason. Or inline: "Crow - ...".
 export function parseReleaseNotes(lines, names, postDate) {
   const byKey = new Map(Object.entries(names).map(([id, n]) => [keyOf(n), Number(id)]));
-  const out = [];
-  let date = postDate, inBalance = false, cur = null;
+  for (const [alt, real] of Object.entries(SPELLINGS)) if (byKey.has(real) && !byKey.has(alt)) byKey.set(alt, byKey.get(real));
+  const keys = [...byKey.keys()].sort((a, b) => b.length - a.length); // longest first: "Mr. P" before "P"
+  const blocks = [];
+  let date = postDate, inBalance = false, label = null, cur = null, inSection = 0; // inSection: blocks since the section began
   const year = (postDate || '').slice(0, 4) || String(new Date().getUTCFullYear());
+  const startBlock = (id) => { cur = { id, date, label, raw: [] }; blocks.push(cur); inSection++; return cur; };
   for (const raw of lines) {
-    const l = raw.replace(/[\u{1F300}-\u{1FAFF}☀-➿️]/gu, '').trim();
-    const d = l.match(/^(?:MAINTENANCE|UPDATE|HOTFIX|BALANCE CHANGES)\b.*?\b(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+(\d{1,2})/i);
-    if (d) { date = toDate(d[1], d[2], year); continue; }
-    if (/^BALANCE CHANGES$/i.test(l)) { inBalance = true; continue; }
+    const l = raw.replace(/[\u{1F300}-\u{1FAFF}☀-➿️✅]/gu, '').replace(/\s+/g, ' ').trim();
+    if (!l) continue;
+    const d = l.match(/^(?:MAINTENANCE|UPDATE|HOTFIX|BALANCE CHANGES)\b[^A-Za-z0-9]*.*?\b(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i);
+    if (d) { date = toDate(d[1], d[2], year); inBalance = false; cur = null; label = null; continue; }
+    if (/balance changes:?$/i.test(l) && l.length <= 40) {
+      inBalance = /^(general\s+)?balance changes:?$/i.test(l); // skip mode-specific sections (NanoPower, ...)
+      cur = null; label = null; inSection = 0; continue;
+    }
     if (!inBalance) continue;
-    if (/^(BUG FIXES|NEW|OTHER|QUALITY OF LIFE|COMING SOON)\b/i.test(l) && l === l.toUpperCase()) { inBalance = false; cur = null; continue; }
-    // a short line in capitals is a brawler heading; unknown ones (not released yet) end the section
-    if (l === l.toUpperCase() && /[A-Z]/.test(l) && l.length <= 24 && !/^[•·\-–]/.test(l)) {
-      const id = byKey.get(keyOf(l));
-      cur = id ? { id, date, reason: '', lines: [] } : null;
-      if (cur) out.push(cur);
+    if (/^(bug fixes|fixes|other changes|known issues|coming soon|quality of life)\b:?/i.test(l)) { inBalance = false; cur = null; continue; }
+    // mode-only sub-sections ("Brawl Arena Only") don't change Ranked: skip until the next section
+    if (/^[A-Za-z0-9' &-]{3,40}\bonly:?$/i.test(l)) { inBalance = false; cur = null; continue; }
+    if (/^buffs:?$/i.test(l)) { label = 'buff'; cur = null; continue; }
+    if (/^nerfs:?$/i.test(l)) { label = 'nerf'; cur = null; continue; }
+    if (/^(reworks?|adjustments|changes):?$/i.test(l)) { label = null; cur = null; continue; }
+    const k = keyOf(l);
+    if (byKey.has(k)) { startBlock(byKey.get(k)); continue; } // brawler heading
+    // inline: "Crow - Main attack ..." / "Fang 1st NanoPower - ..."
+    const inline = keys.find((kk) => k.startsWith(kk) && new RegExp(`^${names[byKey.get(kk)].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[-–:]`, 'i').test(l));
+    if (inline && (!cur || cur.id !== byKey.get(inline))) {
+      startBlock(byKey.get(inline)).raw.push({ text: l.replace(/^[^-–:]+[-–:]\s*/, ''), bullet: true });
       continue;
     }
-    if (!cur) continue;
-    if (/^[•·\-–]\s*/.test(l)) cur.lines.push({ type: direction(l), text: l.replace(/^[•·\-–]\s*/, '') });
-    else if (!cur.reason && !cur.lines.length) cur.reason = l;
+    // a short all-caps line that isn't a brawler we know (e.g. not released yet) ends the block
+    if (l === l.toUpperCase() && /[A-Z]/.test(l) && l.length <= 24) { cur = null; continue; }
+    const bullet = /^[•·\-–]/.test(l);
+    // A plain line that doesn't read like a change ends the section (the next part of the post,
+    // e.g. "Maps, Game Modes & Rotation Changes"), except the reason sentence right under a heading.
+    // Reasons are sentences (long, or ending in . ! ?), before or after the changes; a short plain
+    // line is a heading.
+    const changeLike = CHANGE_LIKE.test(l);
+    const sentence = l.length > 100 || (!changeLike && (l.length > 60 || /[.!?]$/.test(l)));
+    if (!bullet && (sentence || !changeLike)) {
+      if (cur && (sentence || !cur.raw.length)) { cur.raw.push({ text: l, reason: true }); continue; }
+      if (!cur && (inSection === 0 || sentence)) continue; // intro note
+      // a short name we don't know (typo, not released yet): skip its block, stay in the section
+      if (l.length <= 24 && !/[,&:]/.test(l)) { cur = null; continue; }
+      inBalance = false; cur = null; continue;
+    }
+    if (cur) cur.raw.push({ text: l.replace(/^[•·\-–]\s*/, ''), bullet });
   }
-  return out.filter((c) => c.lines.length);
+  const out = [];
+  for (const b of blocks) {
+    let reason = '';
+    const changeLines = [];
+    for (const r of b.raw) {
+      if (r.reason) { reason ||= r.text; continue; }
+      const w = direction(r.text);
+      changeLines.push({ type: w === 'neutral' ? 'neutral' : b.label || w, text: r.text });
+    }
+    if (!changeLines.length) continue;
+    // the same brawler can appear twice in a post (e.g. under BUFFS and NERFS): merge per date
+    const prev = out.find((x) => x.id === b.id && x.date === b.date);
+    if (prev) prev.lines.push(...changeLines);
+    else out.push({ id: b.id, date: b.date, reason, lines: changeLines });
+  }
+  return out;
 }
 
 // Official entry -> the same shape as recentChanges() rows

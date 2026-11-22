@@ -61,3 +61,21 @@ test('reset: games before (and on) the change day are dropped; too few fresh day
   assert.equal(out[0].maps.m1.r.c['1.2.3'], undefined); // combos with a reset brawler go too
   assert.ok(days[0].maps.m1.r.b[16000001]); // original day files untouched
 });
+
+test('official notes: other layouts (title-case names, BUFFS / NERFS, reasons after, typos, mode-only sections)', () => {
+  const names = { 1: 'Piper', 2: 'Gray', 3: 'Crow', 4: 'Frank', 5: 'Ollie' };
+  const lines = [
+    'September 1, 2026', 'Maintenance - September 16th', '📉 BALANCE CHANGES 📈',
+    'A general note: Super charge rates are adjusted too.',
+    'Buffs', 'Piper', 'Health increased from 2500 to 2800', 'Piper has been outshone by other marksmen for some time, so extra health will help with trading.',
+    'Grey', 'Main Attack damage increased from 1160 to 1280.',
+    'Nerfs', 'Crow', 'Main attack damage reduced 380 - 320',
+    'Brawl Arena Only', 'Nerfs', 'Ollie', 'Damage scaling reduced from 4 to 3',
+    'NANOPOWER BALANCE CHANGES', 'Frank - 3rd NanoPower: HP buff decreased 50% 35%',
+    'Maps, Game Modes, Environments & Rotation Changes', 'Crow', 'Free Brawler Rotation',
+  ];
+  const r = parseReleaseNotes(lines, names, '2026-09-01').map(classifyOfficial);
+  assert.deepEqual(r.map((c) => [c.id, c.date, c.buffs, c.nerfs]), [[1, '2026-09-16', 1, 0], [2, '2026-09-16', 1, 0], [3, '2026-09-16', 0, 1]]);
+  assert.match(r[0].reason, /outshone/);
+  assert.equal(r[0].lines.length, 1); // the reason is not a change line
+});
