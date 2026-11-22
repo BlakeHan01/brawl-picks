@@ -83,6 +83,7 @@ function split(trainList, testDay) {
   const site = fitModel(fitRows), flat = fitModel(fitRows, () => 0), old = oldFit(fitRows);
   const methods = {
     'Site (fitted, presence prior)': (rows) => new Map(scoreRows(rows, site, flat).map((r) => [r.id, r.score])),
+    'Site, a quarter of the fitted K': (rows) => new Map(scoreRows(rows, { ...site, K: site.K / 4 }, flat).map((r) => [r.id, r.score])),
     'Fitted, shrink to 50%': (rows) => new Map(scoreRows(rows, flat, flat).map((r) => [r.id, r.score])),
     'Site before fix (no intercept)': (rows) => oldScores(rows, old.K, old.slope),
     'Fixed: 40 games to 50%': (rows) => new Map(rows.filter((r) => r.g >= 10).map((r) => [r.id, (0.5 * r.g + r.excess + 20) / (r.g + 40)])),
@@ -153,7 +154,7 @@ function paired(f) {
   const m = d.reduce((t, x) => t + x.w * x.v, 0) / d.reduce((t, x) => t + x.w, 0);
   const neff = d.reduce((t, x) => t + x.w, 0) ** 2 / d.reduce((t, x) => t + x.w * x.w, 0);
   const v = d.reduce((t, x) => t + x.w * (x.v - m) ** 2, 0) / d.reduce((t, x) => t + x.w, 0);
-  return { m, se: Math.sqrt(v / Math.max(1, neff - 1)), wins: d.filter((x) => x.v > 0).length, n: d.length };
+  return { m, se: Math.sqrt(v / Math.max(1, neff - 1)), wins: d.filter((x) => x.v > 0).length, n: d.length, neff };
 }
 console.log(`\n=== forward-in-time, ${splits.length} test days, group ${GROUP}, ${W} test games ===`);
 console.log('method                               miss (pts)  vs site        top 5    vs site');
@@ -163,4 +164,6 @@ for (const k of names) {
   const f = (x, d) => (Number.isFinite(x.m) && k !== SITE ? `${x.m >= 0 ? '+' : ''}${x.m.toFixed(2)}±${x.se.toFixed(2)}`.padEnd(13) : ''.padEnd(13));
   console.log(`${k.padEnd(36)} ${Number.isFinite(miss) ? miss.toFixed(2).padStart(6) : '     -'}      ${f(dm)} ${top.toFixed(2).padStart(6)}%   ${f(dt)}`);
 }
+console.log(`days the site wins on miss: ${names.filter((k) => k !== SITE && Number.isFinite(splits[0].res[k].miss)).map((k) => `${k}: ${splits.filter((s) => s.res[SITE].miss < s.res[k].miss).length}/${splits.length}`).join('; ')}`);
+console.log(`effective number of test days (game-weighted): ${(W ** 2 / splits.reduce((t, s) => t + s.testGames ** 2, 0)).toFixed(1)}`);
 console.log(`\nodd/even-day dispersion (1 = coin-flip noise only): ${dispersion().toFixed(2)}`);

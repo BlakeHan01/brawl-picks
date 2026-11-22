@@ -83,18 +83,21 @@ site flags under 200 games as a rough guide.
 Ranked maps with 40+ training games and 100+ test games. Two measures:
 
 - **Miss**: typical distance, in points, between the estimate and the brawler's true win rate on
-  the test day. Coin-flip noise is the same for every method and is removed (unbiased: subtract
-  `y(1-y) g/(g-1)` per brawler from the squared error). Lower is better.
+  the test day. Coin-flip noise is the same for every method and is removed (subtract `y(1-y) g/(g-1)`
+  per brawler from the squared error; unbiased if the noise is pure coin flips. It is a bit
+  larger (dispersion 1.22, section 6), so absolute misses read slightly high; comparisons stay fair). Lower is better.
 - **Top 5**: skill-adjusted win rate (section 3) on the test day of each map's top 5. Higher is better.
 
 Days are weighted by test games; differences are paired against the site, +/- one standard error
-across days.
+across days. With uneven days that is only about 2.8 effective test days, and training days
+overlap, so treat the standard errors as optimistic.
 
-Real data, Nov 14-22 2026, test days Nov 18-22 (5 days, 24 maps, 224,551 test games):
+Real data, Nov 14-22 2026, test days Nov 18-22 (5 days, 13-24 maps a day, 224,551 test games):
 
 | Method | Miss (points) | vs site | Top 5 | vs site |
 |---|---|---|---|---|
 | **Site: fitted, presence prior** | **2.89** | | 53.8% | |
+| Site with a quarter of the fitted K | 3.48 | +0.59 +/- 0.34 | 54.3% | +0.5 +/- 0.3 |
 | Fitted, shrink toward 50% | 3.01 | +0.12 +/- 0.01 | 53.9% | +0.1 +/- 0.1 |
 | Site before the review fix (no intercept) | 2.98 | +0.09 +/- 0.03 | 53.9% | +0.1 +/- 0.1 |
 | Fixed: 40 games toward 50% | 3.46 | +0.57 +/- 0.23 | 54.6% | +0.8 +/- 0.5 |
@@ -105,22 +108,26 @@ Real data, Nov 14-22 2026, test days Nov 18-22 (5 days, 24 maps, 224,551 test ga
 What this shows:
 
 - **Points**: the site's estimate misses a brawler's true win rate by about 2.9 points, against
-  5.1 for raw win rates (43% smaller), and is the most accurate method tested on every comparison.
-  The presence prior helps a little but consistently (0.12 +/- 0.01).
-- **Top 5**: all shrinkage methods are within about 1.5 standard errors of each other. Weaker
+  5.1 for raw win rates (43% smaller). It has the lowest miss of the methods tested, beating each
+  on at least 4 of 5 days. The presence prior helps a little (better on 4 of 5 days; on Nov 18,
+  the smallest day, plain shrinkage was 0.02 better).
+- **Top 5**: all shrinkage methods are within about 1.6 standard errors of each other. Weaker
   pulling (fixed 40 games, or a quarter of the fitted K: +0.5 +/- 0.3) picks slightly better top 5s
   but misstates the points more. The difference isn't statistically clear with 5 test days; the
   site keeps the fitted K because its points are what we show, and we re-test as days accumulate.
 - **Teammate adjustment** (RAPM: each team's skill-adjusted result split across its three members
   by ridge regression, as in basketball plus-minus; Sill 2010) is no clear gain on the top-5 test
   and gives no calibrated rate, so we keep the simpler model.
-- **Trophy-game maps** (special events, 50 of 76 maps; `node scripts/score-lab.mjs t`): miss 2.33
-  for the site vs 4.73 raw, on 29,594 test games. Top 5 differences are within noise.
+- **Trophy-game maps** (`node scripts/score-lab.mjs t`): only the pure trophy-game group could be
+  tested, 1-15 maps a day (29,594 test games): miss 2.33 for the site vs 4.73 raw; top-5
+  differences within noise. Maps ranked on mixed Ranked + trophy games are not tested.
 
-Review: an independent statistical review (Nov 22 2026) found that the earlier version dropped the
+Review: a statistical review of the code and claims (Nov 22 2026, an AI reviewer working in
+this project, not an outside statistician) found that the earlier version dropped the
 fitted line's intercept (priors were ~2.7 points too high, worst for brawlers with few games), that
 the lab didn't run the production code, and that the earlier table pooled splits that trained on a
-single day. All three are fixed; the table above is the corrected test.
+single day. All three are fixed, and a second pass checked the
+numbers above against the lab output.
 
 ## 6. Limitations (what this does not do)
 
