@@ -1,7 +1,7 @@
 import { searchMaps, searchBrawlers, initials } from './search.js';
 import { API_BASE } from './config.js';
 import { modeName, modeColor, isSoloMode } from './modes.js';
-import { curate, costsFrom, normalizeTag, readiness, withRealBuffies } from './curate.js';
+import { curate, costsFrom, normalizeTag, readiness, withRealBuffies, tierOf } from './curate.js';
 import { upgradeChains, makePlan, saveUpFor } from './advisor.js';
 
 const $ = (s) => document.querySelector(s);
@@ -371,6 +371,22 @@ function renderMap(m) {
   const bar = (v) => 12 + (88 * (v - lo)) / Math.max(0.1, hi - lo);
   const big = (it) => pct(val(it));
   const bigLabel = ord === 'curated' ? 'for you' : o.big;
+  // Score and Curated pick show a tier (S-D) instead of a squashed "56.4%"; the numbers are in the tooltip.
+  const tiered = ord === 'score' || ord === 'curated';
+  const edge = (v) => `${v >= 50 ? '+' : '−'}${Math.abs(v - 50).toFixed(1)}`;
+  const tierBadge = (it, small = false) => {
+    const t = tierOf(val(it));
+    return `<span class="tier t-${t}${small ? ' sm' : ''}" aria-label="Tier ${t}">${t}</span>`;
+  };
+  // Curated: when the build is what holds it back, say what it would be fully built
+  const tierNote = (it) => {
+    if (!it.c?.missing.length) return '';
+    const full = tierOf(it.r[1]), now = tierOf(it.c.curated);
+    return full !== now ? `<span class="tnote">${full} fully built</span>` : '';
+  };
+  const tierTip = (it) => it.c
+    ? `${edge(it.r[1])} points vs an average brawler on this map${it.c.penalty ? `, ${edge(50 - it.c.penalty)} for what's missing = ${edge(it.c.curated)}` : ''}`
+    : `${edge(it.r[1])} points vs an average brawler on this map (score ${pct(it.r[1])})`;
   // One short line of stats; picked % is in the order "Most picked" and the tooltip, bans show as
   // a chip only when they matter (20%+), unless sorting by bans.
   // Under the big number: win % only when the big number isn't already a win estimate, and a
@@ -406,7 +422,9 @@ function renderMap(m) {
         ${cls(it.r[0])}
         ${build(it.r[0], false, it.c?.own, true)}
         ${notRanked(it.r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
-        <span class="wrbig ${(ord === 'score' || ord === 'win' || ord === 'curated') && val(it) >= 55 ? 'hi' : ''}" title="${esc(statTip(it.r))}">${big(it)}<small> ${bigLabel}</small></span>
+        ${tiered
+          ? `<span class="tierwrap" title="${esc(`${tierTip(it)} · ${statTip(it.r)}`)}">${tierBadge(it)}${tierNote(it)}</span>`
+          : `<span class="wrbig ${ord === 'win' && val(it) >= 55 ? 'hi' : ''}" title="${esc(statTip(it.r))}">${big(it)}<small> ${bigLabel}</small></span>`}
         ${missing(it)}
         ${sub(it.r).length ? `<span class="ur" title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}</span>` : ''}
         ${banChip(it.r)}
@@ -418,8 +436,8 @@ function renderMap(m) {
         <span class="rk">${i + 6}</span>
         ${av(it.r[0], 'sq', true)}
         <span class="rn"><b><button class="bname" type="button" data-bpop="${esc(it.r[0])}">${esc(B[it.r[0]]?.n)}</button> ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true, it.c?.own)}${missing(it, true)}<span title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}${banChip(it.r)}</span></span>
-        <span class="barwrap"><span class="bar" style="width:${bar(val(it)).toFixed(0)}%"></span></span>
-        <span class="wr">${big(it)}</span>
+        ${tiered ? '<span class="barwrap empty" aria-hidden="true"></span>' : `<span class="barwrap"><span class="bar" style="width:${bar(val(it)).toFixed(0)}%"></span></span>`}
+        <span class="wr" title="${esc(tiered ? tierTip(it) : statTip(it.r))}">${tiered ? tierBadge(it, true) : big(it)}</span>
       </li>`).join('')}</ul>` : ''}`;
   }
   mapView.innerHTML = head + `
@@ -621,7 +639,7 @@ function openPop(id, e) {
     ${top.length ? `<h3 class="bpop-h">Best Ranked maps</h3><ol class="bp-maps sm">${top.map((x) => `<li><a href="#m-${esc(x.m.id)}" data-frompop>
         <span class="dot" style="--mc:${esc(x.m.modeColor || '#888')}"></span>
         <span class="name"><span class="nt">${esc(x.m.name)}</span><small class="mline">${esc(x.m.mode)}</small></span>
-        <span class="bp-rk num" title="${pct(x.row[2])} win">#${x.rank}<small> of ${x.of}</small></span></a></li>`).join('')}</ol>` : ''}
+        <span class="bp-rk num" title="${pct(x.row[2])} win">#${x.rank}<small> of ${x.of}</small></span><span class="tier sm t-${tierOf(x.row[1])}" aria-label="Tier ${tierOf(x.row[1])}">${tierOf(x.row[1])}</span></a></li>`).join('')}</ol>` : ''}
     <a class="btn bpop-more" href="#b-${esc(id)}">Full page →</a>`;
   $('#bpop').hidden = false;
   $('#bpopIn .bpop-x').focus();
@@ -671,7 +689,7 @@ function renderBrawler(id) {
         <span class="dot" style="--mc:${esc(x.m.modeColor || '#888')}"></span>
         <span class="name"><span class="nt">${esc(x.m.name)}</span><small class="mline">${esc(x.m.mode)}${x.m.ranked ? '<span class="nt2"> · Ranked</span>' : ''}${x.m.active ? '<span class="nt2"> · Live</span>' : ''}</small></span>
         ${x.m.ranked ? '<b class="tag">Ranked</b>' : ''}${x.m.active ? '<b class="tag live">Live</b>' : ''}
-        <span class="bp-rk num" title="${pct(x.row[2])} win · ${n(x.row[4])} games">#${x.rank}<small> of ${x.of}</small></span></a></li>`).join('')}</ol>
+        <span class="bp-rk num" title="${pct(x.row[2])} win · ${n(x.row[4])} games">#${x.rank}<small> of ${x.of}</small></span><span class="tier sm t-${tierOf(x.row[1])}" aria-label="Tier ${tierOf(x.row[1])}">${tierOf(x.row[1])}</span></a></li>`).join('')}</ol>
     ${st.maps.length > 8 ? `<button class="morebtn" id="bMore" type="button" aria-expanded="${bShowAll}">${bShowAll ? 'Show fewer maps' : `All ${st.maps.length} maps`}</button>` : ''}` : '<p class="empty">Not enough high-skill games with this brawler yet.</p>'}
     ${st.partners.length ? `<h2>Best with</h2><ul class="bp-mates">${st.partners.map((p) => `<li><a href="#b-${p.id}">${av(p.id, 'sq')}<span class="bn">${esc(DATA.brawlers[p.id]?.n)}</span><span class="num">${pct(p.win)}</span>${p.syn >= 0.5 ? `<small class="up">+${p.syn.toFixed(1)}</small>` : ''}</a></li>`).join('')}</ul>` : ''}`;
   $('#bMore')?.addEventListener('click', () => { bShowAll = !bShowAll; renderBrawler(id); });
@@ -699,6 +717,7 @@ function renderCombos(m) {
     <details class="legend"><summary>How are combos ranked?</summary><p><b>Combos</b> are brawlers on the same team in ${m.basis === 'masters' || m.basis === 'legendary' || m.basis === 'ranked' ? 'Legendary+ Ranked' : 'high-trophy'} games on this map, last ${DATA.window?.days ?? 14} days. <b>Win %</b> is adjusted for skill and pulled toward 50% when there are few games, like single brawlers. <b>Together</b> is how much better (or worse) the combo did than its brawlers' own results add up to: a plus means they work well together.</p></details>`;
 }
 
+const TIER_TEXT = '<b>Tiers</b> say how much more often good players win with a brawler here than with an average one: <b>S</b> +5.5 points or more (the best one or two per map), <b>A</b> +3.5, <b>B</b> +1.5, <b>C</b> about average, <b>D</b> below.';
 function legend(m, hasBans) {
   const ordNow = order === 'banned' && !hasBans ? 'score' : order;
   if (ordNow === 'curated') {
@@ -706,13 +725,13 @@ function legend(m, hasBans) {
     const measured = c && DATA.costs.n >= 20000;
     const fmt = (k, label) => (c?.[k]?.penalty ? `${label} −${c[k].penalty}` : null);
     const list = measured ? [fmt('powerLevel', 'each power level below 11'), fmt('noHypercharge', 'no hypercharge'), fmt('buffieMissing', 'each missing buffie'), fmt('noStarPower', 'no star power'), fmt('otherStarPower', 'other star power'), fmt('noGadget', 'no gadget'), fmt('otherGadget', 'other gadget'), fmt('gearMissing', 'each missing gear')].filter(Boolean) : [];
-    return `<b>Curated pick</b> ranks the brawlers you own (power 9+) by our score for this map, minus what each missing piece costs. Build icons in full colour are ones you have; grey ones with a red dot you don't have yet. ${measured
+    return `<b>Curated pick</b> ranks the brawlers you own (power 9+) by how strong they are on this map with your build: what each missing piece costs comes off. ${TIER_TEXT} Inside a tier, brawlers with nothing missing come first. When your build lowers the tier, the card says what it would be fully built. Build icons in full colour are ones you have; grey ones with a red dot you don't have yet. ${measured
       ? `The costs are measured from ${DATA.costs.n.toLocaleString()} Ranked games of ${DATA.costs.players.toLocaleString()} Legendary+ players, comparing each player's games with and without the piece${list.length ? `: ${list.join(', ')} points` : ''}. Pieces that made no clear difference cost nothing.`
       : 'Until enough games are measured, the costs are estimates.'}`;
   }
   const skill = `Results are adjusted for skill: the players whose battle logs we read won ${m.topSideWin != null ? `${m.topSideWin.toFixed(0)}%` : 'most'} of these games, so each brawler is compared with how often its side usually won (50% = average).`;
   if (ordNow === 'banned') return `<b>Most banned</b> orders brawlers by how often good players ban them on this map: the ones they least want to face, and the ones you're least likely to get. ${skill}`;
-  if (ordNow === 'score') return `<b>Score</b> is our best guess at each brawler's win rate here. It starts from how often good players pick${hasBans ? ' or ban' : ''} it on this map and moves toward its actual results as games add up, with weights fitted from the data. ${skill}`;
+  if (ordNow === 'score') return `${TIER_TEXT} <b>Score</b> is our best guess at each brawler's win rate here. It starts from how often good players pick${hasBans ? ' or ban' : ''} it on this map and moves toward its actual results as games add up, with weights fitted from the data. ${skill}`;
   if (ordNow === 'win') return `<b>Win rate</b> uses results only: few games are pulled toward 50% so luck can't put a brawler on top. ${skill}`;
   return `<b>Most picked</b> orders brawlers by how often these players chose them here. Popular brawlers are safe meta picks, but they don't always win the most. ${skill}`;
 }

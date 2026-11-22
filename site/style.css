@@ -593,3 +593,17 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
   .navlink { padding: 0 5px; font-size: 12px; }
   .acct { max-width: 26vw; padding: 6px 9px; }
 }
+
+/* ---- tiers (Score and Curated pick) ---- */
+.tierwrap { display: grid; justify-items: center; gap: 2px; margin-top: 2px; }
+.tier { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; font: 400 24px/1 var(--f-display); color: #160f00; }
+.tier.sm { width: 26px; height: 26px; border-radius: 7px; font-size: 16px; flex: none; }
+.t-S { background: #ffc928; box-shadow: 0 0 12px color-mix(in srgb, #ffc928 45%, transparent); }
+.t-A { background: #3ddc84; }
+.t-B { background: #62b6ff; }
+.t-C { background: #b9b2d6; }
+.t-D { background: #6f6690; color: #f5f2ff; }
+.tnote { font: 700 10.5px var(--f-body); color: var(--dim); white-space: nowrap; }
+.rest .wr { display: flex; justify-content: flex-end; }
+.bp-maps .tier.sm { margin-left: 2px; }
+.barwrap.empty { background: none; }
