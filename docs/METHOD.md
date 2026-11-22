@@ -14,13 +14,13 @@ estimate of how often good players win with it there, compared with an average b
 
 The tiers are fixed cut-offs on that number, the same on every map:
 
-| Tier | Points above average | Share of listed brawlers (top 40 per map, Ranked maps, Nov 14-22 games) |
+| Tier | Points above average | Share of listed brawlers (top 40 per map, Ranked maps, live Nov 22 2026) |
 |---|---|---|
-| S | +5.5 or more | 3% (0 to 4 per map; about a third of maps have none) |
-| A | +3.5 to +5.5 | 8% |
+| S | +5.5 or more | 3% (0 to 4 per map; 9 of 26 maps have none) |
+| A | +3.5 to +5.5 | 9% |
 | B | +1.5 to +3.5 | 22% |
-| C | 0 to +1.5 | 26% |
-| D | below 0 | 40% |
+| C | 0 to +1.5 | 28% |
+| D | below 0 | 37% |
 
 The cut-offs are fixed so a tier means the same thing everywhere: a map with no S simply has no
 standout pick.
@@ -74,11 +74,11 @@ points = 100 * (score - 0.5)
   at 0 (it can't go negative).
 - `u`: each brawler's results on the **other** maps of the family (this map is left out, so its games
   aren't counted twice), averaged with weights that favour maps with more games, then shrunk toward 0 by how much brawlers really differ (spread fitted from the data;
-  about 2.6 points on Ranked maps). A brawler strong everywhere starts higher on a map where it has
+  2.8 points on Ranked maps, Nov 22 2026). A brawler strong everywhere starts higher on a map where it has
   few games, instead of starting at the map average.
 - `K` = how many games the starting value is "worth": `0.25 / tau^2`, where `tau^2` is how much a
   brawler's strength on one map varies around its starting value. With `u` in the starting value
-  that's less, so K is larger (about 310 games on Ranked maps, Nov 22 2026; capped 40-600).
+  that's less, so K is larger (320 games on Ranked maps, Nov 22 2026; capped 40-600).
 - Both spreads are fitted by **maximum likelihood** (normal approximation, coin-flip noise `0.25/g`),
   alternating between the two levels until they settle. Everything is refitted on every update,
   separately for Ranked maps and trophy maps.
