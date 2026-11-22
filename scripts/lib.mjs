@@ -37,6 +37,19 @@ export async function getJSON(url, headers = {}, tries = 3) {
   throw Object.assign(new Error(`GET ${url} failed: ${last?.message}`), { fatal: !!last?.fatal });
 }
 
+// Plain text (HTML pages). Same retry rules as getJSON.
+export async function getText(url, headers = {}, tries = 2) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': 'brawl-picks/1.0 (https://github.com/BlakeHan01/brawl-picks)', ...headers }, redirect: 'follow' });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return await r.text();
+    } catch (e) { last = e; await new Promise((res) => setTimeout(res, 1000 * (i + 1))); }
+  }
+  throw new Error(`GET ${url} failed: ${last?.message}`);
+}
+
 export const official = (path) => getJSON(`${BS_BASE}${path}`, { authorization: `Bearer ${BS_KEY}` });
 
 // Run fn over items with at most n in flight. Failures become null.

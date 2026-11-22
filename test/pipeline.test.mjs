@@ -298,7 +298,7 @@ function mockApi({ spacingMin = 1 } = {}) {
 }
 
 const run = (script, env) =>
-  new Promise((res) => execFile('node', [script], { env: { ...process.env, IMAGES: 'off', ...env } }, (err, stdout, stderr) => res({ code: err?.code ?? 0, stdout, stderr })));
+  new Promise((res) => execFile('node', [script], { env: { ...process.env, IMAGES: 'off', BALANCE: 'off', ...env } }, (err, stdout, stderr) => res({ code: err?.code ?? 0, stdout, stderr })));
 
 test('end to end: stats + rotation from the mock API', async () => {
   const srv = mockApi().listen(0);

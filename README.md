@@ -15,6 +15,8 @@ The best Brawl Stars brawlers for every map, from high-skill games. Live at
   map, and build icons show what you own.
 - **Upgrades**: type in your power points and coins; get the upgrades that help you most in
   Ranked, with a short reason for each.
+- **Balance changes**: the last 14 days of buffs, nerfs and reworks, split into Major and Minor,
+  with Supercell's reason for each. Rankings for a changed brawler restart from the change.
 
 ## How it works
 
@@ -55,6 +57,12 @@ GitHub Actions (daily.yml)            Cloudflare Worker (worker/)          GitHu
   are used. Buffies only count for brawlers that have them in the game (`data.buffies`).
 - **Combos**: same-team duos and trios, adjusted the same way, plus how much better they do
   together than apart.
+- **Balance changes**: read once a day from Supercell's release notes (first) and each brawler's
+  balance history on [Liquipedia](https://liquipedia.net/brawlstars/) (CC BY-SA), which can lag a
+  patch. Rule-based: a rework, a new brawler or 3+ changes is *major*, 1-2 is *minor*; each line is
+  a buff or a nerf from its wording. A brawler changed in the last 14 days only counts games after
+  the change (the patch day is dropped too), and is left out of the picks until it has 3 days of
+  fresh games: steady data over a guess. Saved in `data/balance.json`.
 - **Images**: [Brawlify CDN](https://github.com/Brawlify/CDN), downloaded once and shrunk to the
   size the site shows them.
 
@@ -98,7 +106,7 @@ site/           the website (deployed as-is)
   app.js          UI and routing        search.js   map + brawler search
   curate.js       Curated pick          advisor.js  Upgrades
   modes.js        mode names/colours    config.js   Worker URL
-scripts/        data job: fetch-data, fetch-rotation, builds (best builds, piece costs),
+scripts/        data job: fetch-data, fetch-rotation, builds (best builds, piece costs), balance,
                 data-branch.sh, shrink-images, score-lab (score validation), serve, demo-data
 worker/         Cloudflare Worker (player lookup, live rotation, cron)
 tools/ux-check/ browser UX check
