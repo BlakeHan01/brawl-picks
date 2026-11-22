@@ -248,7 +248,7 @@ export function applyResets(days, resets, minDays = MIN_DAYS_AFTER) {
   const hidden = new Set();
   const cut = new Map(Object.entries(resets).map(([id, d]) => [Number(id), d]));
   for (const [id, d] of cut) if (days.filter((x) => x.date > d).length < minDays) hidden.add(id);
-  if (!cut.size) return { days, hidden };
+  if (!cut.size) return { days, hidden, stats: {} };
   const strip = (g, ids) => {
     if (!g) return g;
     const b = { ...g.b }, bans = { ...(g.bans || {}) };
@@ -257,12 +257,22 @@ export function applyResets(days, resets, minDays = MIN_DAYS_AFTER) {
     if (c) c = Object.fromEntries(Object.entries(c).filter(([k]) => !k.split('.').some((o) => ids.has(Number(o) + 16000000))));
     return { ...g, b, bans, ...(c ? { c } : {}) };
   };
+  // per brawler: games dropped vs kept, so each live run shows what the reset did
+  const stats = Object.fromEntries([...cut.keys()].map((id) => [id, { dropped: 0, kept: 0 }]));
+  for (const day of days) for (const m of Object.values(day.maps || {})) for (const gk of GROUPS) {
+    for (const id of cut.keys()) {
+      const v = m[gk]?.b?.[id];
+      if (!v) continue;
+      const n = v[0] + v[2];
+      if (hidden.has(id) || day.date <= cut.get(id)) stats[id].dropped += n; else stats[id].kept += n;
+    }
+  }
   const out = days.map((day) => {
     const ids = new Set([...cut].filter(([id, d]) => hidden.has(id) || day.date <= d).map(([id]) => id));
     if (!ids.size) return day;
     return { ...day, maps: Object.fromEntries(Object.entries(day.maps || {}).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).map(([gk, g]) => [gk, GROUPS.includes(gk) ? strip(g, ids) : g]))])) };
   });
-  return { days: out, hidden };
+  return { days: out, hidden, stats };
 }
 
 function add(into, from) {
@@ -517,8 +527,9 @@ async function main() {
   const winStart = new Date(Date.parse(date) - (WINDOW_DAYS - 1) * 864e5).toISOString().slice(0, 10);
   const updates = mergeChanges(bal.official || [], bal.liquipedia || []).filter((c) => c.date >= winStart && c.date <= date && brawlers[c.id]);
   const resets = resetsFrom(updates);
-  const { days, hidden } = applyResets(rawDays, resets);
+  const { days, hidden, stats: resetStats } = applyResets(rawDays, resets);
   log(`balance: ${updates.length} changes in the window; reset ${Object.keys(resets).length} brawlers, ${hidden.size} hidden until they have ${MIN_DAYS_AFTER} days of fresh games`);
+  for (const [id, st] of Object.entries(resetStats)) if (st.dropped || hidden.has(Number(id))) log(`  reset ${brawlers[id]?.n} (changed ${resets[id]}): dropped ${st.dropped} games, kept ${st.kept}${hidden.has(Number(id)) ? ', hidden' : ''}`);
 
   const { maps, model } = buildMaps(days, rankedPool);
   const count = (k) => maps.filter((m) => m.basis === k).length;
