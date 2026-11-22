@@ -173,6 +173,22 @@ test('fitModel keeps the intercept: the game-weighted average brawler stays at 5
   }
 });
 
+test('fitModel learns a brawler\'s strength across maps and uses it where it has few games', () => {
+  // brawler 0 is +4 points on every map; on the last map it has only 15 games (all coin flips)
+  const maps = Array.from({ length: 25 }, (_, mi) => Array.from({ length: 12 }, (_, b) => {
+    const strong = b === 0 ? 0.04 : -0.04 / 11;
+    const g = b === 0 && mi === 24 ? 15 : 800;
+    const wobble = 0.012 * Math.sin(mi * 5 + b * 7);
+    return { id: b, g, excess: mi === 24 && b === 0 ? 0 : g * (strong + wobble), pick: 0.05, ban: 0.01 };
+  }));
+  const m = fitModel(maps);
+  assert.ok(m.brawler[0] > 0.025, `brawler effect ${m.brawler[0]}`);
+  const s = scoreRows(maps[24], m, { K: 150 });
+  assert.ok(s.find((r) => r.id === 0).score > 0.52, 'few games here, but strong everywhere: starts high');
+  const one = fitModel(maps, undefined, { hierarchy: false });
+  assert.equal(one.brawler, undefined);
+});
+
 test('Ranked games are split by the lowest rank in the game', () => {
   const items = [
     battle('#P1', 0, { trophies: 15 }), // Mythic: all Ranked only
