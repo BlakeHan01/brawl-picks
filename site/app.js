@@ -143,7 +143,7 @@ function renderFoot() {
   const parts = [];
   if (DATA.generatedAt) parts.push(`<span title="${(DATA.battles?.legendary ?? 0).toLocaleString()} Legendary+ Ranked games, plus ${(DATA.battles?.trophy ?? 0).toLocaleString()} high-trophy games for special-event maps">Updated ${esc(new Date(DATA.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} · ${(DATA.battles?.ranked ?? 0).toLocaleString()} Ranked games, last ${DATA.window?.days === 1 ? 'day' : `${DATA.window?.days ?? '?'} days`}</span>`);
   if (ROT.fetchedAt) parts.push(ROT.live ? 'timers live' : `timers checked ${ago(ROT.fetchedAt)}`);
-  $('#foot').innerHTML = `${parts.join(' · ')}<br>Images from <a href="https://brawlify.com" rel="noopener">Brawlify</a>. Not affiliated with, endorsed or sponsored by Supercell.`;
+  $('#foot').innerHTML = `${parts.join(' · ')} · <a href="#method">How we rank</a><br>Images from <a href="https://brawlify.com" rel="noopener">Brawlify</a>. Not affiliated with, endorsed or sponsored by Supercell.`;
 }
 
 // ---------- avatars ----------
@@ -429,7 +429,7 @@ function renderMap(m) {
         ${sub(it.r).length ? `<span class="ur" title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}</span>` : ''}
         ${banChip(it.r)}
       </li>`).join('')}</ol>
-    <details class="legend"><summary>How is this ranked?</summary><p>${legend(m, hasBans)}</p></details>
+    <details class="legend"><summary>How is this ranked?</summary><p>${legend(m, hasBans)} <a href="#method">More on how we rank</a></p></details>
     ${rest.length ? `<h2>${o.head} <small>ranks 6–${items.length}</small></h2>
     <ul class="rest">${rest.map((it, i) => `
       <li>
@@ -541,6 +541,33 @@ const statTiles = (st) => {
   return `<div class="bp-tiles" title="Legendary+ Ranked games, last ${DATA.window?.days ?? 14} days">${tile(st.win, 'Win')}${tile(st.pick, 'Picked')}${tile(st.ban, 'Banned')}</div>`;
 };
 
+// ---------- How we rank (#method): the method in one place, with today's numbers ----------
+function renderMethod() {
+  const bt = DATA.battles || {}, days = DATA.window?.days ?? 14;
+  const c = DATA.costs, measured = c && c.n >= 20000;
+  const tierRows = [['S', '+5.5 or more', 'the best one or two per map'], ['A', '+3.5', ''], ['B', '+1.5', ''], ['C', 'about average', ''], ['D', 'below average', '']];
+  mapView.innerHTML = `
+    ${backLink()}
+    <h1 class="upd-h1">How we rank</h1>
+    <p class="up-lede">Plain rules, real games, no guesses. Updated ${esc(new Date(DATA.generatedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}.</p>
+    <section class="mth">
+      <h2>The games</h2>
+      <p>${n(bt.legendary ?? 0)} Ranked games from the last ${days} days in which <b>every player was Legendary or higher</b>, read from the official Brawl Stars API. Low ranks, bots and friendly games are left out. Special-event maps without Ranked use games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies (${n(bt.trophy ?? 0)} games). Refreshed every 3 hours.</p>
+      <h2>Tiers</h2>
+      <p>How much more often good players win with a brawler on a map than with an average one, in win-rate points:</p>
+      <div class="mth-tiers">${tierRows.map(([t, v, note]) => `<div><span class="tier sm t-${t}">${t}</span><b>${v}</b>${note ? `<small>${note}</small>` : ''}</div>`).join('')}</div>
+      <p>Two corrections keep this honest. <b>Skill:</b> the players we sample win more than they lose, so each brawler is compared with how often its side usually wins. <b>Luck:</b> a brawler with few games is pulled toward average until the games add up, and gets a <span class="few">Few games</span> flag under 200.</p>
+      <h2>Curated pick</h2>
+      <p>Your brawlers at power 9+, ordered by tier with your build: each missing piece (power, star power, gadget, gears, hypercharge, Buffies) costs points. Inside a tier, brawlers with nothing missing come first. ${measured ? `Costs are measured from ${n(c.n)} Ranked games, comparing each player's games with and without the piece.` : 'Costs are careful estimates until enough Ranked games are measured, then the measured values take over by themselves.'}</p>
+      <h2>Best builds</h2>
+      <p>The game doesn't share what players equip. But a Legendary+ player who owns only one of a brawler's gadgets or star powers chose it first, and owning exactly two gears means those are the pair. Counted over thousands of profiles; a <b>close call</b> means skilled players are split and either is fine.</p>
+      <h2>After a balance change</h2>
+      <p>A brawler changed in the last 14 days only counts games played after the change, and is left out of the picks until it has 3 days of fresh games. See <a href="#updates">Balance changes</a>.</p>
+      <h2>Sources</h2>
+      <p>Games: the official Brawl Stars API. Balance changes: Supercell's release notes and <a href="https://liquipedia.net/brawlstars/" rel="noopener">Liquipedia</a>. Images: <a href="https://brawlify.com" rel="noopener">Brawlify</a>. Brawl Picks is not affiliated with Supercell.</p>
+    </section>`;
+}
+
 // ---------- balance changes (last 14 days, from Supercell's release notes and Liquipedia) ----------
 const shortDate = (iso) => new Date(iso + 'T12:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const plusDays = (iso, n) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
@@ -618,6 +645,22 @@ function renderUpdBanner() {
 
 // ---------- brawler card: tap a brawler's name anywhere for a quick look (modal dialog) ----------
 let popOpener = null, popId = null;
+// "On Hard Rock Mine": the evidence behind the tier, in words a player can check.
+function hereBlock(m, i, own) {
+  const r = rowsOf(m)[i], t = tierOf(r[1]);
+  const edge = r[1] - 50;
+  let mine = '';
+  if (own && own.power >= 9) {
+    const c = curate([r], me(), Object.fromEntries(Object.entries(DATA.brawlers).map(([k, v]) => [k, v.b])), costsFrom(DATA.costs))[0];
+    if (c && tierOf(c.curated) !== t) mine = `<p class="bp-here-mine">With your build: <span class="tier sm t-${tierOf(c.curated)}">${tierOf(c.curated)}</span></p>`;
+  }
+  return `<div class="bp-here">
+    <span class="tier t-${t}" aria-label="Tier ${t}">${t}</span>
+    <div><p class="bp-here-h">On ${esc(m.name)}: #${i + 1} of ${rowsOf(m).length}</p>
+    <p class="bp-here-ev">Good players win ${Math.abs(edge).toFixed(1)} points ${edge >= 0 ? 'more' : 'less'} often with it than with an average brawler here · ${n(r[4])} games · ${pct(r[2])} win${r[5] ? ` · banned ${Math.round(r[5])}%` : ''}${r[4] < 200 ? ' · <b>few games: a rough guide</b>' : ''}</p>${mine}</div>
+  </div>`;
+}
+
 function openPop(id, e) {
   const b = DATA.brawlers[id];
   if (!b) return;
@@ -625,7 +668,11 @@ function openPop(id, e) {
   popOpener = e?.target?.closest?.('[data-bpop]') || (document.activeElement !== document.body ? document.activeElement : null);
   popId = String(id);
   const st = brawlerStats(id), own = me()?.brawlers.find((x) => Number(x.id) === Number(id));
-  const top = st.maps.filter((x) => x.m.ranked).slice(0, 3);
+  // Opened from a map: the card answers "why this pick here?" with this map's evidence. Elsewhere it
+  // gives the brawler's Ranked overview. (Full page has both.)
+  const here = mapView.hidden ? null : mapsById.get(currentId());
+  const hi = here ? rowsOf(here).findIndex((r) => String(r[0]) === String(id)) : -1;
+  const top = st.maps.filter((x) => x.m.ranked && x.m !== here).slice(0, 3);
   $('#bpopIn').innerHTML = `
     <div class="bpop-head">
       ${av(id, 'sq bp-av')}
@@ -633,10 +680,10 @@ function openPop(id, e) {
       <button class="bpop-x" type="button" aria-label="Close">✕</button>
     </div>
     ${changedNote(id)}
-    ${statTiles(st)}
+    ${hi >= 0 ? hereBlock(here, hi, own) : here ? `<p class="bp-here none">Not among the top ${rowsOf(here).length} picks on ${esc(here.name)}.</p>` : statTiles(st)}
     ${b.b ? `<div class="bp-build">${build(id, false, own || null, 'all')}</div>` : ''}
     ${yoursLine(id)}
-    ${top.length ? `<h3 class="bpop-h">Best Ranked maps</h3><ol class="bp-maps sm">${top.map((x) => `<li><a href="#m-${esc(x.m.id)}" data-frompop>
+    ${top.length ? `<h3 class="bpop-h">${here ? 'Also strong on' : 'Best Ranked maps'}</h3><ol class="bp-maps sm">${top.map((x) => `<li><a href="#m-${esc(x.m.id)}" data-frompop>
         <span class="dot" style="--mc:${esc(x.m.modeColor || '#888')}"></span>
         <span class="name"><span class="nt">${esc(x.m.name)}</span><small class="mline">${esc(x.m.mode)}</small></span>
         <span class="bp-rk num" title="${pct(x.row[2])} win">#${x.rank}<small> of ${x.of}</small></span><span class="tier sm t-${tierOf(x.row[1])}" aria-label="Tier ${tierOf(x.row[1])}">${tierOf(x.row[1])}</span></a></li>`).join('')}</ol>` : ''}
@@ -681,6 +728,7 @@ function renderBrawler(id) {
     </div>
     ${changedNote(id)}
     ${statTiles(st)}
+    ${st.games ? `<p class="bp-basis">From ${n(st.games)} Legendary+ Ranked games on ${st.maps.filter((x) => x.m.ranked).length} maps, last ${DATA.window?.days ?? 14} days · <a href="#method">How we rank</a></p>` : ''}
     ${b.b ? `<h2>Best build</h2>${buildRows(id, own || null)}` : ''}
     ${you}
     ${st.modes.length ? `<h2>Best modes</h2><ul class="bp-modes">${st.modes.map((k) => `<li style="--mc:${esc(k.color || '#888')}"><span class="d"></span>${esc(k.mode)} <b class="num">${pct(k.win)}</b></li>`).join('')}</ul>` : ''}
@@ -1034,6 +1082,7 @@ function backTarget() {
   if (prev === '#' || prev === '') return { label: 'Home', inApp: true };
   if (prev === '#upgrades') return { label: 'Upgrades', inApp: true };
   if (prev === '#updates') return { label: 'Balance changes', inApp: true };
+  if (prev === '#method') return { label: 'How we rank', inApp: true };
   const b = prev.match(/^#b-(\d+)$/)?.[1];
   if (b && DATA.brawlers[b]) return { label: DATA.brawlers[b].n, inApp: true };
   const m = prev.match(/^#m-(.+)$/)?.[1];
@@ -1076,6 +1125,11 @@ function route() {
     mapView.hidden = true;
     searchView.hidden = true;
     document.title = 'Upgrades · Brawl Picks';
+  } else if (location.hash === '#method') {
+    renderMethod();
+    mapView.hidden = false;
+    searchView.hidden = true;
+    document.title = 'How we rank · Brawl Picks';
   } else if (onUpd) {
     renderUpdates();
     mapView.hidden = false;
