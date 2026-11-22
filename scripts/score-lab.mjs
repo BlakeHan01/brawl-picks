@@ -16,8 +16,9 @@ function sum(list) {
   const maps = new Map();
   for (const { d } of list) for (const [k, m] of Object.entries(d.maps)) {
     const a = m[GROUP]; if (!a?.n) continue;
-    const x = maps.get(k) || { n: 0, sw: 0, b: {}, bans: {} };
+    const x = maps.get(k) || { n: 0, sw: 0, b: {}, bans: {}, c: {} };
     x.n += a.n; x.sw += a.sw;
+    for (const [t, v] of Object.entries(a.c || {})) { const s = (x.c[t] ||= [0, 0, 0, 0]); for (let i = 0; i < 4; i++) s[i] += v[i]; }
     for (const [id, v] of Object.entries(a.b)) { const s = (x.b[id] ||= [0, 0, 0, 0]); for (let i = 0; i < 4; i++) s[i] += v[i]; }
     for (const [id, c] of Object.entries(a.bans || {})) x.bans[id] = (x.bans[id] || 0) + c;
     maps.set(k, x);
@@ -73,6 +74,34 @@ function methods(trainAll) {
   return { m, info: { pick: fp, flat, ...(fb ? { presence: fb } : {}) } };
 }
 
+// Teammate-adjusted (RAPM, as in basketball/soccer plus-minus): each 3-brawler team's skill-adjusted
+// result (wins minus its side's usual rate) is split across its members by ridge regression:
+//   minimise sum_teams games * (excess rate - b_a - b_b - b_c)^2 + lambda * sum b^2
+// b_i is then the brawler's own win-rate effect with teammates held constant.
+function rapm(a, lambda) {
+  const pS = a.sw / a.n;
+  const ids = new Map();
+  const rowsT = [];
+  for (const [key, [gS, wS, gO, wO]] of Object.entries(a.c || {})) {
+    const mem = key.split('.').map((o) => String(Number(o) + 16000000));
+    for (const m of mem) if (!ids.has(m)) ids.set(m, ids.size);
+    if (gS) rowsT.push({ mem, g: gS, y: wS / gS - pS });
+    if (gO) rowsT.push({ mem, g: gO, y: wO / gO - (1 - pS) });
+  }
+  const K = ids.size;
+  if (!K) return {};
+  const A = Array.from({ length: K }, (_, i) => { const r = new Float64Array(K); r[i] = lambda; return r; });
+  const bv = new Float64Array(K);
+  for (const t of rowsT) {
+    const ix = t.mem.map((m) => ids.get(m));
+    for (const i of ix) { bv[i] += t.g * t.y; for (const j of ix) A[i][j] += t.g; }
+  }
+  // Gauss-Seidel (A is symmetric positive definite)
+  const x = new Float64Array(K);
+  for (let it = 0; it < 200; it++) for (let i = 0; i < K; i++) { let s2 = bv[i]; for (let j = 0; j < K; j++) if (j !== i) s2 -= A[i][j] * x[j]; x[i] = s2 / A[i][i]; }
+  return Object.fromEntries([...ids].map(([id, i]) => [id, x[i]]));
+}
+
 function evaluate(trainList, testList, label) {
   const tr = sum(trainList), te = sum(testList);
   const trainAll = [...tr.values()].flatMap(rows);
@@ -95,6 +124,14 @@ function evaluate(trainList, testList, label) {
     };
     for (const [name, fn] of Object.entries(m)) score(name, fn);
     score('Most picked', (r) => r.g);
+    // RAPM: ranking only (its effects are per-member, not brawler-level rates), so top-5 metric
+    for (const lam of [50, 150, 400]) {
+      const bt = rapm(a, lam), name = `Teammate-adjusted (RAPM, ridge ${lam})`;
+      res[name] ||= { se: NaN, w: 1, top: 0, topW: 0 };
+      if (!Object.keys(bt).length) continue;
+      const ranked = rs.filter((r) => bt[r.id] != null).sort((x, y) => bt[y.id] - bt[x.id]);
+      for (const r of ranked.slice(0, 5)) { const t = testBy[r.id]; if (t?.g) { res[name].top += t.ex; res[name].topW += t.g; } }
+    }
   }
   console.log(`\n=== ${label}: ${maps} maps (group ${GROUP}) ===`);
   for (const [k, f] of Object.entries(info)) console.log(`  fitted ${k}: prior worth ${(0.25 / f.tau2).toFixed(0)} games, slope ${(100 * f.beta).toFixed(2)} pts per e-fold`);

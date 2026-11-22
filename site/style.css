@@ -632,3 +632,7 @@ button.tier:focus-visible { outline: 2px solid var(--text); outline-offset: 2px;
 .tev.few { color: var(--warn); }
 .rest .wr { flex-direction: column; align-items: flex-end; gap: 3px; }
 .rest .wr .tev { font-size: 10.5px; }
+.mth-t { border-collapse: collapse; margin: 8px 0 10px; font-size: 14px; min-width: min(100%, 360px); }
+.mth-t th, .mth-t td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); }
+.mth-t thead th { color: var(--dim); font-weight: 600; font-size: 12.5px; }
+.mth-t td.num { text-align: right; }
