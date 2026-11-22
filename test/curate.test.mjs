@@ -69,3 +69,16 @@ test('owning two gears that are not the top pair counts as missing (when the pai
   assert.deepEqual(readiness(full(1, { gears: [3, 7, 8] }), g).missing, []);
   assert.deepEqual(readiness(full(1, { gears: [3, 4] }), { gear: [[7, 8], 30, 100, 0] }).missing, []); // not clear
 });
+
+import { tierOf } from '../site/curate.js';
+test('tiers from points above an average brawler', () => {
+  assert.deepEqual([57, 55.5, 55.4, 53.5, 51.5, 50, 49.9].map(tierOf), ['S', 'S', 'A', 'A', 'B', 'C', 'D']);
+});
+
+test('curated order: tier first, then the ready one, then the number', () => {
+  const rows = [[1, 55.4, 55, 10, 100, 0], [2, 54.0, 54, 10, 100, 0], [3, 57, 57, 10, 100, 0]];
+  const P = costsFrom({ n: 50000, pieces: { noHypercharge: { penalty: 0.1 } } });
+  const c = curate(rows, { brawlers: [full(1, { hyperCharges: [] }), full(2), full(3)] }, {}, P);
+  // 3 is S; 1 (A, 55.3, no hypercharge) and 2 (A, 54.0, fully built): the fully built one first
+  assert.deepEqual(c.map((x) => x.row[0]), [3, 2, 1]);
+});

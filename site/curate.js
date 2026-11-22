@@ -66,7 +66,11 @@ export function curate(rows, profile, builds = {}, P = PENALTY) {
     const { missing, penalty } = readiness(own, builds[row[0]], P);
     out.push({ row, own, missing, penalty, curated: Math.round((row[1] - penalty) * 10) / 10 });
   }
-  return out.sort((a, b) => b.curated - a.curated || a.missing.length - b.missing.length || b.row[1] - a.row[1]);
+  // Tier first (S..D, what the card shows), then the one that's ready (fewest missing pieces),
+  // then the exact number: inside a tier the gaps between brawlers are small, while a missing
+  // piece is something you feel in the game.
+  const rank = (c) => TIERS.findIndex(([t]) => t === tierOf(c.curated));
+  return out.sort((a, b) => rank(a) - rank(b) || a.missing.length - b.missing.length || b.curated - a.curated || b.row[1] - a.row[1]);
 }
 
 // Player tags use these characters only; "O" is typed for "0" a lot.
@@ -83,3 +87,10 @@ export function withRealBuffies(profile, buffyIds) {
   const has = new Set((buffyIds || []).map(Number));
   return { ...profile, brawlers: profile.brawlers.map((b) => (b.buffies && !has.has(Number(b.id)) ? (({ buffies, ...rest }) => rest)(b) : b)) };
 }
+
+// Tiers: how much more often (win-rate points) good players win with a brawler here than with an
+// average one (score 50). Same cut-offs on every map, set from the spread of real scores: S is
+// about the top 5% of brawler-map pairs (each map's best one or two), A the next ~10%, C is
+// around average. A tier is easier to read in a 15-second draft than "56.4%".
+export const TIERS = [['S', 5.5], ['A', 3.5], ['B', 1.5], ['C', 0], ['D', -Infinity]];
+export const tierOf = (score) => TIERS.find(([, t]) => score - 50 >= t)[0];
