@@ -48,6 +48,8 @@ GitHub Actions (daily.yml)            Cloudflare Worker (worker/)          GitHu
     side usually won on that map;
   - *luck*: results are pulled toward 50% with weight fitted from the data (few games count less),
     starting from how often good players pick or ban the brawler there.
+  - Full method, formulas and the held-out test: [docs/METHOD.md](docs/METHOD.md)
+    (`node scripts/score-lab.mjs` reruns the test on the day files).
 - **Best build**: the official API never says what was equipped. A skilled player who owns only
   one of a brawler's star powers or gadgets chose it first, and owning exactly two gears means
   those are the pair. Counted over thousands of Legendary+ profiles; close calls are flagged.
@@ -112,7 +114,7 @@ worker/         Cloudflare Worker (player lookup, live rotation, cron)
 tools/ux-check/ browser UX check
 test/           node:test suites
 data/           per-day counts, on the data branch
-docs/           Cloudflare setup handoff notes (history)
+docs/           METHOD.md (how scores work, validation), Cloudflare setup notes (history)
 prototype/      the first clickable prototype
 ```
 

@@ -151,6 +151,28 @@ test('fitModel finds a presence effect only when there is one', () => {
   assert.equal(sc(1).win, 0.5); // win rate ignores presence
 });
 
+test('fitModel keeps the intercept: the game-weighted average brawler stays at 50%', () => {
+  // Popular brawlers play most games (as in real data), excess sums to 0 per map, strength follows presence.
+  const maps = Array.from({ length: 30 }, (_, mi) => {
+    const rows = Array.from({ length: 12 }, (_, b) => {
+      const pres = 0.01 * Math.exp(b / 3);
+      return { id: b, g: Math.round(4000 * pres), x: b / 3, pick: pres * 0.7, ban: pres * 0.3, mi };
+    });
+    const W = rows.reduce((t, r) => t + r.g, 0), mx = rows.reduce((t, r) => t + r.g * r.x, 0) / W;
+    for (const r of rows) r.excess = r.g * (0.02 * (r.x - mx) + 0.01 * Math.sin(mi * 7 + r.id * 3));
+    return rows;
+  });
+  const m = fitModel(maps);
+  assert.ok(m.intercept < -0.01, `intercept ${m.intercept}`); // the line crosses 50% above the median
+  for (const rows of maps.slice(0, 3)) {
+    const s = scoreRows(rows.map((r) => ({ ...r, excess: 0, g: 10 })), m, { K: 150 });
+    // with no evidence, the game-weighted prior average is ~50%, not shifted up
+    const W = rows.reduce((t, r) => t + r.g, 0);
+    const avg = s.reduce((t, r) => t + rows.find((x) => x.id === r.id).g * r.score, 0) / W;
+    assert.ok(Math.abs(avg - 0.5) < 0.004, `average prior ${avg}`);
+  }
+});
+
 test('Ranked games are split by the lowest rank in the game', () => {
   const items = [
     battle('#P1', 0, { trophies: 15 }), // Mythic: all Ranked only

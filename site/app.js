@@ -549,18 +549,36 @@ const statTiles = (st) => {
 function renderMethod() {
   const bt = DATA.battles || {}, days = DATA.window?.days ?? 14;
   const c = DATA.costs, measured = c && c.n >= 20000;
-  const tierRows = [['S', '+5.5 or more', 'the best one or two per map'], ['A', '+3.5', ''], ['B', '+1.5', ''], ['C', 'about average', ''], ['D', 'below average', '']];
+  const K = DATA.model?.ranked?.score?.K ?? 150;
+  const sides = Object.values(DATA.maps || {}).filter((m) => m.ranked && m.topSideWin).map((m) => m.topSideWin).sort((a, b) => a - b);
+  const topSide = sides.length ? sides[sides.length >> 1] : 52;
+  const tierRows = [['S', '+5.5 or more', 'usually one or two per map'], ['A', '+3.5', ''], ['B', '+1.5', ''], ['C', 'about average', ''], ['D', 'below average', '']];
   mapView.innerHTML = `
     ${backLink()}
     <h1 class="upd-h1">How we rank</h1>
     <p class="up-lede">Plain rules, real games, no guesses. Updated ${esc(new Date(DATA.generatedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}.</p>
     <section class="mth">
       <h2>The games</h2>
-      <p>${n(bt.legendary ?? 0)} Ranked games from the last ${days} days in which <b>every player was Legendary or higher</b>, read from the official Brawl Stars API. Low ranks, bots and friendly games are left out. Special-event maps without Ranked use games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies (${n(bt.trophy ?? 0)} games). Refreshed every 3 hours.</p>
+      <p>${n(bt.legendary ?? 0)} Ranked games from the last ${days} days in which <b>every player was Legendary or higher</b>, read from the official Brawl Stars API. Low ranks and friendly games are left out. Special-event maps without Ranked use games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies (${n(bt.trophy ?? 0)} games). Refreshed every 3 hours.</p>
+      <h2>What a point means</h2>
+      <p>A point is one percent of win rate. <b>+6 points</b> on a map means good players win about <b>56 games in 100</b> with that brawler there, where an average brawler wins 50.</p>
       <h2>Tiers</h2>
-      <p>How much more often good players win with a brawler on a map than with an average one, in win-rate points:</p>
+      <p>The same cut-offs on every map:</p>
       <div class="mth-tiers">${tierRows.map(([t, v, note]) => `<div><span class="tier sm t-${t}">${t}</span><b>${v}</b>${note ? `<small>${note}</small>` : ''}</div>`).join('')}</div>
-      <p>Two corrections keep this honest. <b>Skill:</b> the players we sample win more than they lose, so each brawler is compared with how often its side usually wins. <b>Luck:</b> a brawler with few games is pulled toward average until the games add up, and gets a <span class="few">Few games</span> flag under 200.</p>
+      <h2>How the points are worked out</h2>
+      <p><b>1. Fix for skill.</b> The players we sample are strong: their side wins about ${pct(topSide)} of games. So a brawler is compared with how often its side usually wins on that map, not with 50%.</p>
+      <p><b>2. Fix for luck.</b> 20 wins in 30 games isn't proof of a 67% brawler. Each result is blended with a starting guess, worth ${n(K)} games: with 50 games the guess has most of the say, with 1,000 games the brawler's own results do. The starting guess leans slightly toward brawlers good players pick and ban more. Both numbers are refitted from the games on every update. This is <a href="https://arxiv.org/abs/0803.3697" rel="noopener">empirical Bayes</a>, the standard way to compare rates with very different sample sizes.</p>
+      <p>Under 200 games gets a <span class="few">Few games</span> flag: the score can still be 3 points or more off.</p>
+      <h2>Does it work?</h2>
+      <p>We test it on days it hasn't seen: rank brawlers using only earlier days, then check the next day's games. Nov 18-22, up to 24 Ranked maps a day, 224,551 games:</p>
+      <table class="mth-t"><thead><tr><th scope="col">Ranking by</th><th scope="col">Misses true win rate by</th><th scope="col">Top 5 won</th></tr></thead><tbody>
+        <tr><th scope="row">Our points</th><td class="num"><b>2.9 points</b></td><td class="num">53.8%</td></tr>
+        <tr><th scope="row">Raw win rate</th><td class="num">5.1 points</td><td class="num">53.7%</td></tr>
+        <tr><th scope="row">Most picked</th><td class="num">–</td><td class="num">51.4%</td></tr>
+      </tbody></table>
+      <p>Our points land nearly twice as close to what really happens. "Top 5 won" is the skill-adjusted win rate of each map's top 5 the next day; methods that pull less toward the guess, or split each team's result across its three brawlers (like basketball's plus-minus), did slightly better there but not by a clear margin, and they get the points themselves less right. The <a href="https://github.com/BlakeHan01/brawl-picks/blob/main/docs/METHOD.md#5-evidence-that-it-works-held-out-test-reviewed" rel="noopener">full test and its review</a> are public.</p>
+      <h2>What it can't see</h2>
+      <p>Each player's own skill (someone great with one brawler picks it more), matchups and teammates are averaged over, not modelled. <a href="https://github.com/BlakeHan01/brawl-picks/blob/main/docs/METHOD.md" rel="noopener">Full method and formulas</a>.</p>
       <h2>Curated pick</h2>
       <p>Your brawlers at power 9+, ordered by tier with your build: each missing piece (power, star power, gadget, gears, hypercharge, Buffies) costs points. Inside a tier, brawlers with nothing missing come first. ${measured ? `Costs are measured from ${n(c.n)} Ranked games, comparing each player's games with and without the piece.` : 'Costs are careful estimates until enough Ranked games are measured, then the measured values take over by themselves.'}</p>
       <h2>Best builds</h2>
@@ -769,7 +787,7 @@ function renderCombos(m) {
     <details class="legend"><summary>How are combos ranked?</summary><p><b>Combos</b> are brawlers on the same team in ${m.basis === 'masters' || m.basis === 'legendary' || m.basis === 'ranked' ? 'Legendary+ Ranked' : 'high-trophy'} games on this map, last ${DATA.window?.days ?? 14} days. <b>Win %</b> is adjusted for skill and pulled toward 50% when there are few games, like single brawlers. <b>Together</b> is how much better (or worse) the combo did than its brawlers' own results add up to: a plus means they work well together.</p></details>`;
 }
 
-const TIER_TEXT = '<b>Tiers</b> say how much more often good players win with a brawler here than with an average one: <b>S</b> +5.5 points or more (the best one or two per map), <b>A</b> +3.5, <b>B</b> +1.5, <b>C</b> about average, <b>D</b> below.';
+const TIER_TEXT = '<b>Tiers</b> say how much more often good players win with a brawler here than with an average one: <b>S</b> +5.5 points or more (usually one or two per map), <b>A</b> +3.5, <b>B</b> +1.5, <b>C</b> about average, <b>D</b> below.';
 function legend(m, hasBans) {
   const ordNow = order === 'banned' && !hasBans ? 'score' : order;
   if (ordNow === 'curated') {

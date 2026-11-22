@@ -102,7 +102,7 @@ async function dialogPattern(p, label, openSel, dialogSel) {
 (async () => {
   const server = spawn(process.execPath, [resolve(ROOT, 'scripts/serve.mjs'), String(PORT)], { stdio: 'ignore' });
   await new Promise((r) => setTimeout(r, 800));
-  const b = await chromium.launch();
+  const b = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
   const phone = devices['iPhone 13'];
   const pages = [];
   try {
