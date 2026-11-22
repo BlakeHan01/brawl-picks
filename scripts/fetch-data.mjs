@@ -549,6 +549,9 @@ async function main() {
   const classes = (await readJSON(classFile)) || { classes: {} };
   // the seed fills gaps (new brawlers): Brawlify blocks the runners, so the saved copy never learns them
   for (const [id, c] of Object.entries(seed.classes)) if (!classes.classes[id]) classes.classes[id] = c;
+  // new brawlers can be seeded by name before their id is known
+  const byName = new Map(Object.entries(seed.byName || {}).map(([n, c]) => [nameKey(n), c]));
+  for (const [id, b] of Object.entries(brawlers)) if (!classes.classes[id] && byName.has(nameKey(b.n))) classes.classes[id] = byName.get(nameKey(b.n));
   if (BRAWLIFY !== 'off') {
     try {
       const j = await getJSON(`${BRAWLIFY}/brawlers`, {}, 1);
