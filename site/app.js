@@ -374,10 +374,14 @@ function renderMap(m) {
   // Score and Curated pick show a tier (S-D) instead of a squashed "56.4%"; the numbers are in the tooltip.
   const tiered = ord === 'score' || ord === 'curated';
   const edge = (v) => `${v >= 50 ? '+' : '−'}${Math.abs(v - 50).toFixed(1)}`;
+  // The tier opens the brawler card (the evidence), like the name and picture do
   const tierBadge = (it, small = false) => {
     const t = tierOf(val(it));
-    return `<span class="tier t-${t}${small ? ' sm' : ''}" aria-label="Tier ${t}">${t}</span>`;
+    return `<button type="button" class="tier t-${t}${small ? ' sm' : ''}" data-bpop="${esc(it.r[0])}" aria-label="Tier ${t}: see why">${t}</button>`;
   };
+  // Evidence under every tier: the win rate and how many games it rests on (orange when few)
+  const kfmt = (g) => (g >= 1000 ? `${(g / 1000).toFixed(g >= 10000 ? 0 : 1)}k` : String(g));
+  const evidence = (it) => `<span class="tev${it.r[4] < 200 ? ' few' : ''}">${Math.round(it.r[2])}% win · ${kfmt(it.r[4])} games</span>`;
   // Curated: when the build is what holds it back, say what it would be fully built
   const tierNote = (it) => {
     if (!it.c?.missing.length) return '';
@@ -393,7 +397,7 @@ function renderMap(m) {
   // "Few games" flag when the sample is small. Everything else is in the tooltip.
   const sub = (r) => [
     ord === 'picked' || ord === 'banned' ? `${pct(r[2])} win` : null,
-    r[4] < 200 ? '<span class="few" title="Fewer than 200 games: treat as a rough guide">Few games</span>' : null,
+    r[4] < 200 && !tiered ? '<span class="few" title="Fewer than 200 games: treat as a rough guide">Few games</span>' : null,
   ].filter(Boolean);
   const banChip = (r) => (hasBans && ord !== 'banned' && r[5] >= 20 ? `<span class="banchip" title="Banned in ${pct(r[5])} of games here">Banned ${Math.round(r[5])}%</span>` : '');
   const statTip = (r) => `${pct(r[2])} win · ${pct(r[3])} picked${hasBans ? ` · ${pct(r[5])} banned` : ''} · ${n(r[4])} games`;
@@ -423,7 +427,7 @@ function renderMap(m) {
         ${build(it.r[0], false, it.c?.own, true)}
         ${notRanked(it.r[0]) ? '<span class="nr">Not in Ranked</span>' : ''}
         ${tiered
-          ? `<span class="tierwrap" title="${esc(`${tierTip(it)} · ${statTip(it.r)}`)}">${tierBadge(it)}${tierNote(it)}</span>`
+          ? `<span class="tierwrap" title="${esc(`${tierTip(it)} · ${statTip(it.r)}`)}">${tierBadge(it)}${evidence(it)}${tierNote(it)}</span>`
           : `<span class="wrbig ${ord === 'win' && val(it) >= 55 ? 'hi' : ''}" title="${esc(statTip(it.r))}">${big(it)}<small> ${bigLabel}</small></span>`}
         ${missing(it)}
         ${sub(it.r).length ? `<span class="ur" title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}</span>` : ''}
@@ -437,7 +441,7 @@ function renderMap(m) {
         ${av(it.r[0], 'sq', true)}
         <span class="rn"><b><button class="bname" type="button" data-bpop="${esc(it.r[0])}">${esc(B[it.r[0]]?.n)}</button> ${cls(it.r[0])}${notRanked(it.r[0]) ? ' <span class="nr">Not in Ranked</span>' : ''}</b>${build(it.r[0], true, it.c?.own)}${missing(it, true)}<span title="${esc(statTip(it.r))}">${sub(it.r).join(' · ')}${banChip(it.r)}</span></span>
         ${tiered ? '<span class="barwrap empty" aria-hidden="true"></span>' : `<span class="barwrap"><span class="bar" style="width:${bar(val(it)).toFixed(0)}%"></span></span>`}
-        <span class="wr" title="${esc(tiered ? tierTip(it) : statTip(it.r))}">${tiered ? tierBadge(it, true) : big(it)}</span>
+        <span class="wr" title="${esc(tiered ? tierTip(it) : statTip(it.r))}">${tiered ? `${tierBadge(it, true)}${evidence(it)}` : big(it)}</span>
       </li>`).join('')}</ul>` : ''}`;
   }
   mapView.innerHTML = head + `

@@ -625,3 +625,10 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
 .bp-basis { margin: 8px 0 0; font-size: 12.5px; color: var(--dim); }
 details.legend p a { color: var(--accent); }
 .bp-here .tier { flex: none; }
+/* tier as a button (opens the brawler card) + the evidence under it */
+button.tier { border: 0; padding: 0; cursor: pointer; }
+button.tier:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.tev { font: 600 11px var(--f-body); color: var(--dim); white-space: nowrap; }
+.tev.few { color: var(--warn); }
+.rest .wr { flex-direction: column; align-items: flex-end; gap: 3px; }
+.rest .wr .tev { font-size: 10.5px; }
