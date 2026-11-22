@@ -89,8 +89,7 @@ export function withRealBuffies(profile, buffyIds) {
 }
 
 // Tiers: how much more often (win-rate points) good players win with a brawler here than with an
-// average one (score 50). Same cut-offs on every map, set from the spread of real scores: S is
-// about the top 5% of brawler-map pairs (each map's best one or two), A the next ~10%, C is
-// around average. A tier is easier to read in a 15-second draft than "56.4%".
+// average one (score 50). Fixed cut-offs, the same on every map, so a tier means the same thing
+// everywhere: S (+5.5) is 0-4 brawlers per map (some maps have none), C is around average. A tier is easier to read in a 15-second draft than "56.4%".
 export const TIERS = [['S', 5.5], ['A', 3.5], ['B', 1.5], ['C', 0], ['D', -Infinity]];
 export const tierOf = (score) => TIERS.find(([, t]) => score - 50 >= t)[0];

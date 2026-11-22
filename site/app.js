@@ -552,7 +552,7 @@ function renderMethod() {
   const K = DATA.model?.ranked?.score?.K ?? 150;
   const sides = Object.values(DATA.maps || {}).filter((m) => m.ranked && m.topSideWin).map((m) => m.topSideWin).sort((a, b) => a - b);
   const topSide = sides.length ? sides[sides.length >> 1] : 52;
-  const tierRows = [['S', '+5.5 or more', 'usually one or two per map'], ['A', '+3.5', ''], ['B', '+1.5', ''], ['C', 'about average', ''], ['D', 'below average', '']];
+  const tierRows = [['S', '+5.5 or more', '0 to 4 per map, some have none'], ['A', '+3.5', ''], ['B', '+1.5', ''], ['C', 'about average', ''], ['D', 'below average', '']];
   mapView.innerHTML = `
     ${backLink()}
     <h1 class="upd-h1">How we rank</h1>
@@ -787,7 +787,7 @@ function renderCombos(m) {
     <details class="legend"><summary>How are combos ranked?</summary><p><b>Combos</b> are brawlers on the same team in ${m.basis === 'masters' || m.basis === 'legendary' || m.basis === 'ranked' ? 'Legendary+ Ranked' : 'high-trophy'} games on this map, last ${DATA.window?.days ?? 14} days. <b>Win %</b> is adjusted for skill and pulled toward 50% when there are few games, like single brawlers. <b>Together</b> is how much better (or worse) the combo did than its brawlers' own results add up to: a plus means they work well together.</p></details>`;
 }
 
-const TIER_TEXT = '<b>Tiers</b> say how much more often good players win with a brawler here than with an average one: <b>S</b> +5.5 points or more (usually one or two per map), <b>A</b> +3.5, <b>B</b> +1.5, <b>C</b> about average, <b>D</b> below.';
+const TIER_TEXT = '<b>Tiers</b> say how much more often good players win with a brawler here than with an average one: <b>S</b> +5.5 points or more (0 to 4 per map, some have none), <b>A</b> +3.5, <b>B</b> +1.5, <b>C</b> about average, <b>D</b> below.';
 function legend(m, hasBans) {
   const ordNow = order === 'banned' && !hasBans ? 'score' : order;
   if (ordNow === 'curated') {
