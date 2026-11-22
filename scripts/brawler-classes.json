@@ -1,5 +1,5 @@
 {
- "_note": "Brawler class per official brawler id. Seeded from Brawlify (2026-11-20), checked against Liquipedia (2026-11-21). Fills gaps in the saved copy; the stats job also refreshes from Brawlify when reachable. Add new brawlers here.",
+ "_note": "Brawler class per official brawler id. Seeded from Brawlify (2026-11-20), checked against Liquipedia (2026-11-21). Fills gaps in the saved copy; the stats job also refreshes from Brawlify when reachable. Add new brawlers here. New brawlers can be added by name under byName (the job matches names to ids).",
  "classes": {
   "16000000": "Damage Dealer",
   "16000001": "Damage Dealer",
@@ -111,5 +111,9 @@
   "16000109": "Controller",
   "16000110": "Damage Dealer",
   "16000111": "Artillery"
+ },
+ "byName": {
+  "Rey": "Marksman",
+  "Ruby": "Damage Dealer"
  }
 }
