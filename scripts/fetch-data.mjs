@@ -201,25 +201,32 @@ export function brawlerRows(a) {
 const presence = (r) => Math.log(Math.max(r.pick + r.ban, 1e-4));
 
 // Empirical Bayes, fitted on every run from all maps together:
-//   true win rate on a map ~ 50% + slope * (presence vs. the map's median), with spread tau.
+//   true win rate on a map ~ 50% + intercept + slope * x, with spread tau,
+//   x = presence vs. the map's median, capped at +/-2 (the same cap when fitting and scoring).
 // From that: K = how many games of evidence the starting point is worth (0.25 / tau^2).
+// The intercept matters: most games are on popular brawlers (x > 0), and the game-weighted
+// average brawler is exactly 50%, so the line has to cross 50% above x = 0.
 // If presence doesn't predict winning, slope comes out ~0 and this is plain shrinking toward 50%.
+export const PRESENCE_CAP = 2;
+const capX = (x) => Math.max(-PRESENCE_CAP, Math.min(PRESENCE_CAP, x));
 export function fitModel(maps, feature = presence) {
   const pts = [];
   for (const rows of maps) {
     const ok = rows.filter((r) => r.g >= MIN_BRAWLER_GAMES);
     const med = median(ok.map(feature));
-    for (const r of ok) pts.push({ x: feature(r) - med, y: r.excess / r.g, w: r.g });
+    for (const r of ok) pts.push({ x: capX(feature(r) - med), y: r.excess / r.g, w: r.g });
   }
-  if (pts.length < 30) return { K: 150, slope: 0, n: pts.length };
+  if (pts.length < 30) return { K: 150, slope: 0, intercept: 0, n: pts.length };
   let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
   for (const p of pts) { sw += p.w; sx += p.w * p.x; sy += p.w * p.y; sxx += p.w * p.x * p.x; sxy += p.w * p.x * p.y; }
   const vx = sxx - (sx * sx) / sw;
-  const slope = vx > 1e-9 ? (sxy - (sx * sy) / sw) / vx : 0;
+  const slope = Math.min(0.04, Math.max(0, vx > 1e-9 ? (sxy - (sx * sy) / sw) / vx : 0));
+  const intercept = sy / sw - slope * (sx / sw); // weighted line through the data's centre
+  // tau^2 = spread left after the line, minus coin-flip noise (0.25/g per brawler; method of moments)
   let num = 0;
-  for (const p of pts) { const res = p.y - slope * p.x; num += p.w * (res * res) - 0.25; }
+  for (const p of pts) { const res = p.y - intercept - slope * p.x; num += p.w * (res * res) - 0.25; }
   const tau2 = Math.max(num / sw, 0.25 / 600);
-  return { K: Math.round(Math.min(600, Math.max(40, 0.25 / tau2))), slope: Math.min(0.04, Math.max(0, slope)), n: pts.length };
+  return { K: Math.round(Math.min(600, Math.max(40, 0.25 / tau2))), slope, intercept, n: pts.length };
 }
 function median(xs) { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)] ?? 0; }
 
@@ -230,7 +237,7 @@ export function scoreRows(rows, scoreModel, winModel) {
   const ok = rows.filter((r) => r.g >= MIN_BRAWLER_GAMES);
   const med = median(ok.map(presence));
   return ok.map((r) => {
-    const prior = 0.5 + scoreModel.slope * Math.max(-2, Math.min(2, presence(r) - med));
+    const prior = 0.5 + (scoreModel.intercept || 0) + scoreModel.slope * capX(presence(r) - med);
     return {
       ...r,
       score: (0.5 * r.g + r.excess + scoreModel.K * prior) / (r.g + scoreModel.K),

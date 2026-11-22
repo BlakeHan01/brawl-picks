@@ -559,7 +559,7 @@ function renderMethod() {
     <p class="up-lede">Plain rules, real games, no guesses. Updated ${esc(new Date(DATA.generatedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}.</p>
     <section class="mth">
       <h2>The games</h2>
-      <p>${n(bt.legendary ?? 0)} Ranked games from the last ${days} days in which <b>every player was Legendary or higher</b>, read from the official Brawl Stars API. Low ranks, bots and friendly games are left out. Special-event maps without Ranked use games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies (${n(bt.trophy ?? 0)} games). Refreshed every 3 hours.</p>
+      <p>${n(bt.legendary ?? 0)} Ranked games from the last ${days} days in which <b>every player was Legendary or higher</b>, read from the official Brawl Stars API. Low ranks and friendly games are left out. Special-event maps without Ranked use games where every brawler had ${n(DATA.minTrophies ?? 750)}+ trophies (${n(bt.trophy ?? 0)} games). Refreshed every 3 hours.</p>
       <h2>What a point means</h2>
       <p>A point is one percent of win rate. <b>+6 points</b> on a map means good players win about <b>56 games in 100</b> with that brawler there, where an average brawler wins 50.</p>
       <h2>Tiers</h2>
@@ -568,17 +568,17 @@ function renderMethod() {
       <h2>How the points are worked out</h2>
       <p><b>1. Fix for skill.</b> The players we sample are strong: their side wins about ${pct(topSide)} of games. So a brawler is compared with how often its side usually wins on that map, not with 50%.</p>
       <p><b>2. Fix for luck.</b> 20 wins in 30 games isn't proof of a 67% brawler. Each result is blended with a starting guess, worth ${n(K)} games: with 50 games the guess has most of the say, with 1,000 games the brawler's own results do. The starting guess leans slightly toward brawlers good players pick and ban more. Both numbers are refitted from the games on every update. This is <a href="https://arxiv.org/abs/0803.3697" rel="noopener">empirical Bayes</a>, the standard way to compare rates with very different sample sizes.</p>
-      <p>Under 200 games gets a <span class="few">Few games</span> flag: the score can still move by 3 points or more.</p>
+      <p>Under 200 games gets a <span class="few">Few games</span> flag: the score can still be 3 points or more off.</p>
       <h2>Does it work?</h2>
-      <p>We test it on days it hasn't seen: rank brawlers using the other days, then check how they did. Nov 14-22, 24 Ranked maps:</p>
-      <table class="mth-t"><thead><tr><th scope="col">Ranking by</th><th scope="col">Top 5 won</th><th scope="col">Prediction misses</th></tr></thead><tbody>
-        <tr><th scope="row">Our points</th><td class="num"><b>53.9%</b></td><td class="num"><b>36% smaller</b></td></tr>
-        <tr><th scope="row">Raw win rate</th><td class="num">52.9%</td><td class="num">–</td></tr>
-        <tr><th scope="row">Most picked</th><td class="num">51.3%</td><td class="num">–</td></tr>
+      <p>We test it on days it hasn't seen: rank brawlers using only earlier days, then check the next day's games. Nov 18-22, 24 Ranked maps, 224,551 games:</p>
+      <table class="mth-t"><thead><tr><th scope="col">Ranking by</th><th scope="col">Misses true win rate by</th><th scope="col">Top 5 won</th></tr></thead><tbody>
+        <tr><th scope="row">Our points</th><td class="num"><b>2.9 points</b></td><td class="num">53.8%</td></tr>
+        <tr><th scope="row">Raw win rate</th><td class="num">5.1 points</td><td class="num">53.7%</td></tr>
+        <tr><th scope="row">Most picked</th><td class="num">–</td><td class="num">51.4%</td></tr>
       </tbody></table>
-      <p>Prediction misses: how far each brawler's predicted win rate lands from what happened, compared with raw win rate. We also tried splitting each team's result across its three brawlers (as basketball's plus-minus does): no better, so we kept the simpler method.</p>
+      <p>Our points land nearly twice as close to what really happens. "Top 5 won" is the skill-adjusted win rate of each map's top 5 the next day; methods that pull less toward the guess, or split each team's result across its three brawlers (like basketball's plus-minus), did slightly better there but not by a clear margin, and they get the points themselves less right. The method was <a href="https://github.com/BlakeHan01/brawl-picks/blob/main/docs/METHOD.md#5-evidence-that-it-works-held-out-test-reviewed" rel="noopener">independently reviewed</a> and the problems it found are fixed.</p>
       <h2>What it can't see</h2>
-      <p>Each player's own skill (someone great with one brawler picks it more), matchups, and teammates are averaged over, not modelled. <a href="https://github.com/BlakeHan01/brawl-picks/blob/main/docs/METHOD.md" rel="noopener">Full method and formulas</a>.</p>
+      <p>Each player's own skill (someone great with one brawler picks it more), matchups and teammates are averaged over, not modelled. <a href="https://github.com/BlakeHan01/brawl-picks/blob/main/docs/METHOD.md" rel="noopener">Full method and formulas</a>.</p>
       <h2>Curated pick</h2>
       <p>Your brawlers at power 9+, ordered by tier with your build: each missing piece (power, star power, gadget, gears, hypercharge, Buffies) costs points. Inside a tier, brawlers with nothing missing come first. ${measured ? `Costs are measured from ${n(c.n)} Ranked games, comparing each player's games with and without the piece.` : 'Costs are careful estimates until enough Ranked games are measured, then the measured values take over by themselves.'}</p>
       <h2>Best builds</h2>
