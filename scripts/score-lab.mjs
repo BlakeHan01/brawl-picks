@@ -15,7 +15,7 @@ import { brawlerRows, fitModel, scoreRows } from './fetch-data.mjs';
 
 const GROUP = process.argv[2] || 'rL';
 const DIR = resolve(ROOT, process.env.DAILY_DIR || 'data/daily');
-const MIN_TRAIN_DAYS = 3, FIT_MIN = 40, TEST_MIN = 100;
+const MIN_TRAIN_DAYS = 3, FIT_MIN = 40, TEST_MIN = Number(process.env.TEST_MIN || 100);
 const files = (await readdir(DIR)).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
 const days = await Promise.all(files.map(async (f) => ({ date: f.slice(0, 10), d: JSON.parse(await readFile(join(DIR, f), 'utf8')) })));
 

@@ -16,11 +16,14 @@ The tiers are fixed cut-offs on that number, the same on every map:
 
 | Tier | Points above average | Share of listed brawlers (top 40 per map, Ranked maps, Nov 22 2026) |
 |---|---|---|
-| S | +5.5 or more | 5% (0 to 7 per map, usually 1-2) |
-| A | +3.5 to +5.5 | 11% |
-| B | +1.5 to +3.5 | 27% |
-| C | 0 to +1.5 | 37% |
-| D | below 0 | 19% |
+| S | +5.5 or more | 3% (0 to 4 per map; 10 of 26 maps have none) |
+| A | +3.5 to +5.5 | 7% |
+| B | +1.5 to +3.5 | 18% |
+| C | 0 to +1.5 | 22% |
+| D | below 0 | 50% |
+
+The cut-offs are fixed so a tier means the same thing everywhere: a map with no S simply has no
+standout pick.
 
 Only each map's top 40 are listed; across *all* brawlers most of the long tail is D.
 
@@ -118,9 +121,10 @@ What this shows:
 - **Teammate adjustment** (RAPM: each team's skill-adjusted result split across its three members
   by ridge regression, as in basketball plus-minus; Sill 2010) is no clear gain on the top-5 test
   and gives no calibrated rate, so we keep the simpler model.
-- **Trophy-game maps** (`node scripts/score-lab.mjs t`): only the pure trophy-game group could be
-  tested, 1-15 maps a day (29,594 test games): miss 2.33 for the site vs 4.73 raw; top-5
-  differences within noise. Maps ranked on mixed Ranked + trophy games are not tested.
+- **Trophy-game maps** (50 of 76 maps; `TEST_MIN=40 node scripts/score-lab.mjs t`): special
+  events rotate, so only 1-21 of them have enough games on a given test day (29,881 test games):
+  miss 1.83 for the site vs 4.62 raw; top-5 differences within noise. Rarely played event maps
+  can't be tested yet. (No map currently uses the mixed Ranked + trophy basis.)
 
 Review: a statistical review of the code and claims (Nov 22 2026, an AI reviewer working in
 this project, not an outside statistician) found that the earlier version dropped the
@@ -128,6 +132,10 @@ fitted line's intercept (priors were ~2.7 points too high, worst for brawlers wi
 the lab didn't run the production code, and that the earlier table pooled splits that trained on a
 single day. All three are fixed, and a second pass checked the
 numbers above against the lab output.
+
+Effect of the fix on the live site (Nov 22, 864 Ranked brawler-map pairs): 477 kept their tier,
+384 moved down, 3 moved up. Brawlers under 200 games moved most (234 of 295), as expected: their
+starting guess had been too high. The fitted guess is now worth 207 games (was 134).
 
 ## 6. Limitations (what this does not do)
 
