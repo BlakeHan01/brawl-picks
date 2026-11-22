@@ -60,6 +60,9 @@ test('reset: games before (and on) the change day are dropped; too few fresh day
   assert.deepEqual(out.map((d) => Object.keys(d.maps.m1.r.b).map(Number)), [[], [], [16000001], [16000001], [16000001]]);
   assert.equal(out[0].maps.m1.r.c['1.2.3'], undefined); // combos with a reset brawler go too
   assert.ok(days[0].maps.m1.r.b[16000001]); // original day files untouched
+  const { stats } = applyResets(days, { 16000001: '2026-11-11', 16000002: '2026-11-13' });
+  assert.deepEqual(stats[16000001], { dropped: 20, kept: 30 }); // 2 days dropped, 3 kept, 10 games a day
+  assert.deepEqual(stats[16000002], { dropped: 50, kept: 0 }); // hidden: everything dropped
 });
 
 test('official notes: other layouts (title-case names, BUFFS / NERFS, reasons after, typos, mode-only sections)', () => {
