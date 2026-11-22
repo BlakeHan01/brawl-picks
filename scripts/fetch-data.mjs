@@ -200,35 +200,86 @@ export function brawlerRows(a) {
 // picked, so strong brawlers show up in bans as much as in picks.
 const presence = (r) => Math.log(Math.max(r.pick + r.ban, 1e-4));
 
-// Empirical Bayes, fitted on every run from all maps together:
-//   true win rate on a map ~ 50% + intercept + slope * x, with spread tau,
-//   x = presence vs. the map's median, capped at +/-2 (the same cap when fitting and scoring).
-// From that: K = how many games of evidence the starting point is worth (0.25 / tau^2).
+// Empirical Bayes, two levels, fitted on every run from all maps of a family together:
+//   true win rate of brawler b on map m = 50% + intercept + slope * x + u_b + e_bm
+//   x   = presence (pick + ban share) vs. the map's median, capped at +/-2 (same cap fit and score)
+//   u_b = the brawler's own strength across all maps (spread tauB), e_bm = this map (spread tau)
+// The starting point (prior) for a brawler on a map is 50% + intercept + slope * x + its shrunk u_b;
+// K = 0.25 / tau^2 is how many games of evidence that starting point is worth.
 // The intercept matters: most games are on popular brawlers (x > 0), and the game-weighted
 // average brawler is exactly 50%, so the line has to cross 50% above x = 0.
-// If presence doesn't predict winning, slope comes out ~0 and this is plain shrinking toward 50%.
+// Variances are fitted by maximum likelihood (normal approximation, coin-flip noise 0.25/g).
 export const PRESENCE_CAP = 2;
 const capX = (x) => Math.max(-PRESENCE_CAP, Math.min(PRESENCE_CAP, x));
-export function fitModel(maps, feature = presence) {
+// ML estimate of the true spread t of values y_i measured with noise variance v_i (mean 0)
+function mlVar(pts, start) {
+  let t = start;
+  for (let it = 0; it < 100; it++) {
+    let s1 = 0, s2 = 0;
+    for (const p of pts) { const V = t + p.v; s1 += (p.y * p.y) / (V * V) - 1 / V; s2 += 1 / (V * V); }
+    const next = Math.max(1e-7, t + s1 / s2);
+    if (Math.abs(next - t) < 1e-9) return next;
+    t = next;
+  }
+  return t;
+}
+// Each brawler's strength across maps: its precision-weighted average residual, shrunk toward 0.
+// On a given map it leaves that map out, so a map's own games aren't counted twice
+// (once as evidence, once inside the starting value).
+function brawlerSums(pts, tau2) {
+  const by = new Map();
+  for (const p of pts) { const v = 0.25 / p.w + tau2, e = by.get(p.id) || { s: 0, w: 0 }; e.s += p.res / v; e.w += 1 / v; by.set(p.id, e); }
+  const tauB2 = mlVar([...by.values()].map((e) => ({ y: e.s / e.w, v: 1 / e.w })), 1e-4);
+  return { by, tauB2 };
+}
+function leaveOut(e, tauB2, res, v) {
+  if (!e) return 0;
+  const s = e.s - (res == null ? 0 : res / v), w = e.w - (res == null ? 0 : 1 / v);
+  return w > 1e-9 ? ((s / w) * tauB2) / (tauB2 + 1 / w) : 0;
+}
+export function fitModel(maps, feature = presence, { hierarchy = true } = {}) {
   const pts = [];
   for (const rows of maps) {
     const ok = rows.filter((r) => r.g >= MIN_BRAWLER_GAMES);
     const med = median(ok.map(feature));
-    for (const r of ok) pts.push({ x: capX(feature(r) - med), y: r.excess / r.g, w: r.g });
+    for (const r of ok) pts.push({ id: r.id, x: capX(feature(r) - med), y: r.excess / r.g, w: r.g });
   }
-  if (pts.length < 30) return { K: 150, slope: 0, intercept: 0, n: pts.length };
+  if (pts.length < 30) return { K: 150, slope: 0, intercept: 0, n: pts.length, brawler: {} };
   let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
   for (const p of pts) { sw += p.w; sx += p.w * p.x; sy += p.w * p.y; sxx += p.w * p.x * p.x; sxy += p.w * p.x * p.y; }
   const vx = sxx - (sx * sx) / sw;
   const slope = Math.min(0.04, Math.max(0, vx > 1e-9 ? (sxy - (sx * sy) / sw) / vx : 0));
   const intercept = sy / sw - slope * (sx / sw); // weighted line through the data's centre
-  // tau^2 = spread left after the line, minus coin-flip noise (0.25/g per brawler; method of moments)
-  let num = 0;
-  for (const p of pts) { const res = p.y - intercept - slope * p.x; num += p.w * (res * res) - 0.25; }
-  const tau2 = Math.max(num / sw, 0.25 / 600);
-  return { K: Math.round(Math.min(600, Math.max(40, 0.25 / tau2))), slope, intercept, n: pts.length };
+  for (const p of pts) p.res = p.y - intercept - slope * p.x;
+  const mapLevel = (shift) => mlVar(pts.map((p, i) => ({ y: p.res - (shift ? shift[i] : 0), v: 0.25 / p.w })), 0.25 / 150);
+  let tau2 = mapLevel(), sums = null;
+  if (hierarchy) {
+    // alternate: brawler strengths given tau, then tau given the (leave-this-map-out) strengths
+    for (let i = 0; i < 4; i++) {
+      sums = brawlerSums(pts, tau2);
+      tau2 = mapLevel(pts.map((p) => leaveOut(sums.by.get(p.id), sums.tauB2, p.res, 0.25 / p.w + tau2)));
+    }
+  }
+  const K = Math.round(Math.min(600, Math.max(40, 0.25 / Math.max(tau2, 0.25 / 600))));
+  const r5 = (x) => Math.round(x * 1e7) / 1e7;
+  return {
+    K, slope, intercept, n: pts.length,
+    ...(hierarchy ? {
+      tau2: r5(tau2), brawlerSpread: Math.sqrt(sums.tauB2), tauB2: r5(sums.tauB2),
+      // per brawler: [sum of residual/variance, sum of 1/variance] over maps, for leave-one-out
+      brawler: Object.fromEntries([...sums.by].map(([id, e]) => [id, [r5(e.s), r5(e.w)]])),
+    } : {}),
+  };
 }
 function median(xs) { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)] ?? 0; }
+
+// The brawler's cross-map strength for one row, leaving this map's own result out.
+function crossMap(model, r, x) {
+  const e = model.brawler?.[r.id];
+  if (!e) return 0;
+  const res = r.excess / r.g - (model.intercept || 0) - model.slope * x;
+  return leaveOut({ s: e[0], w: e[1] }, model.tauB2, res, 0.25 / r.g + model.tau2);
+}
 
 // Score each brawler on one map.
 //   win   = skill-adjusted win rate, pulled toward 50% (fitted strength, no presence)
@@ -237,7 +288,8 @@ export function scoreRows(rows, scoreModel, winModel) {
   const ok = rows.filter((r) => r.g >= MIN_BRAWLER_GAMES);
   const med = median(ok.map(presence));
   return ok.map((r) => {
-    const prior = 0.5 + (scoreModel.intercept || 0) + scoreModel.slope * capX(presence(r) - med);
+    const x = capX(presence(r) - med);
+    const prior = 0.5 + (scoreModel.intercept || 0) + scoreModel.slope * x + crossMap(scoreModel, r, x);
     return {
       ...r,
       score: (0.5 * r.g + r.excess + scoreModel.K * prior) / (r.g + scoreModel.K),
@@ -361,7 +413,7 @@ export function buildMaps(days, rankedPool) {
   const model = {};
   for (const f of ['ranked', 'trophy']) {
     const rowsByMap = chosen.filter((c) => family(c) === f).map((c) => c.rows);
-    model[f] = { score: fitModel(rowsByMap), win: fitModel(rowsByMap, () => 0) };
+    model[f] = { score: fitModel(rowsByMap), win: fitModel(rowsByMap, () => 0, { hierarchy: false }) };
   }
 
   const maps = [];

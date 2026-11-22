@@ -80,12 +80,15 @@ function rapm(a, lambda) {
 function split(trainList, testDay) {
   const tr = sum(trainList), te = sum([testDay]);
   const fitRows = [...tr.values()].filter((a) => a.n >= FIT_MIN).map(brawlerRows);
-  const site = fitModel(fitRows), flat = fitModel(fitRows, () => 0), old = oldFit(fitRows);
+  const site = fitModel(fitRows), flat = fitModel(fitRows, () => 0, { hierarchy: false }), old = oldFit(fitRows);
+  const one = fitModel(fitRows, undefined, { hierarchy: false }), twoFlat = fitModel(fitRows, () => 0);
   const methods = {
-    'Site (fitted, presence prior)': (rows) => new Map(scoreRows(rows, site, flat).map((r) => [r.id, r.score])),
+    'Site (two-level, presence prior)': (rows) => new Map(scoreRows(rows, site, flat).map((r) => [r.id, r.score])),
+    'Two-level, no presence': (rows) => new Map(scoreRows(rows, twoFlat, flat).map((r) => [r.id, r.score])),
+    'One level (site until Nov 22)': (rows) => new Map(scoreRows(rows, one, flat).map((r) => [r.id, r.score])),
     'Site, a quarter of the fitted K': (rows) => new Map(scoreRows(rows, { ...site, K: site.K / 4 }, flat).map((r) => [r.id, r.score])),
     'Fitted, shrink to 50%': (rows) => new Map(scoreRows(rows, flat, flat).map((r) => [r.id, r.score])),
-    'Site before fix (no intercept)': (rows) => oldScores(rows, old.K, old.slope),
+    'One level, before fix (no intercept)': (rows) => oldScores(rows, old.K, old.slope),
     'Fixed: 40 games to 50%': (rows) => new Map(rows.filter((r) => r.g >= 10).map((r) => [r.id, (0.5 * r.g + r.excess + 20) / (r.g + 40)])),
     'Raw win rate (10+ games)': (rows) => new Map(rows.filter((r) => r.g >= 10).map((r) => [r.id, 0.5 + r.excess / r.g])),
     'Most picked': (rows) => new Map(rows.filter((r) => r.g >= 10).map((r) => [r.id, r.g])),
@@ -143,9 +146,9 @@ for (let i = MIN_TRAIN_DAYS; i < days.length; i++) {
   const s = split(days.slice(0, i), days[i]);
   if (!s.maps) continue;
   splits.push({ date: days[i].date, ...s });
-  console.log(`test ${days[i].date}: ${s.maps} maps, ${s.testGames} games; fitted K ${s.site.K} (flat ${s.flat.K}), slope ${(100 * s.site.slope).toFixed(2)}, intercept ${(100 * s.site.intercept).toFixed(2)}`);
+  console.log(`test ${days[i].date}: ${s.maps} maps, ${s.testGames} games; fitted K ${s.site.K}, brawler spread ${(100 * s.site.brawlerSpread).toFixed(2)} pts (flat K ${s.flat.K}), slope ${(100 * s.site.slope).toFixed(2)}, intercept ${(100 * s.site.intercept).toFixed(2)}`);
 }
-const names = Object.keys(splits[0].res), SITE = 'Site (fitted, presence prior)';
+const names = Object.keys(splits[0].res), SITE = 'Site (two-level, presence prior)';
 const W = splits.reduce((t, s) => t + s.testGames, 0);
 const wmean = (f) => splits.reduce((t, s) => t + s.testGames * f(s), 0) / W;
 // paired difference vs the site, SE from the spread across days (game-weighted, effective n)
@@ -157,12 +160,12 @@ function paired(f) {
   return { m, se: Math.sqrt(v / Math.max(1, neff - 1)), wins: d.filter((x) => x.v > 0).length, n: d.length, neff };
 }
 console.log(`\n=== forward-in-time, ${splits.length} test days, group ${GROUP}, ${W} test games ===`);
-console.log('method                               miss (pts)  vs site        top 5    vs site');
+console.log('method                                miss (pts)  vs site        top 5    vs site');
 for (const k of names) {
   const miss = wmean((s) => s.res[k].miss), top = wmean((s) => s.res[k].top);
   const dm = paired((s) => s.res[k].miss - s.res[SITE].miss), dt = paired((s) => s.res[k].top - s.res[SITE].top);
   const f = (x, d) => (Number.isFinite(x.m) && k !== SITE ? `${x.m >= 0 ? '+' : ''}${x.m.toFixed(2)}±${x.se.toFixed(2)}`.padEnd(13) : ''.padEnd(13));
-  console.log(`${k.padEnd(36)} ${Number.isFinite(miss) ? miss.toFixed(2).padStart(6) : '     -'}      ${f(dm)} ${top.toFixed(2).padStart(6)}%   ${f(dt)}`);
+  console.log(`${k.padEnd(37)} ${Number.isFinite(miss) ? miss.toFixed(2).padStart(6) : '     -'}      ${f(dm)} ${top.toFixed(2).padStart(6)}%   ${f(dt)}`);
 }
 console.log(`days the site wins on miss: ${names.filter((k) => k !== SITE && Number.isFinite(splits[0].res[k].miss)).map((k) => `${k}: ${splits.filter((s) => s.res[SITE].miss < s.res[k].miss).length}/${splits.length}`).join('; ')}`);
 console.log(`effective number of test days (game-weighted): ${(W ** 2 / splits.reduce((t, s) => t + s.testGames ** 2, 0)).toFixed(1)}`);

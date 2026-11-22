@@ -47,7 +47,8 @@ GitHub Actions (daily.yml)            Cloudflare Worker (worker/)          GitHu
   - *skill*: top players' side wins most games, so each brawler is compared with how often its
     side usually won on that map;
   - *luck*: results are pulled toward 50% with weight fitted from the data (few games count less),
-    starting from how often good players pick or ban the brawler there.
+    starting from how the brawler does on all other maps and how often good players pick or
+    ban it there.
   - Full method, formulas and the held-out test: [docs/METHOD.md](docs/METHOD.md)
     (`node scripts/score-lab.mjs` reruns the test on the day files).
 - **Best build**: the official API never says what was equipped. A skilled player who owns only
