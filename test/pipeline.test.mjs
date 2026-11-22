@@ -182,7 +182,8 @@ test('fitModel learns a brawler\'s strength across maps and uses it where it has
     return { id: b, g, excess: mi === 24 && b === 0 ? 0 : g * (strong + wobble), pick: 0.05, ban: 0.01 };
   }));
   const m = fitModel(maps);
-  assert.ok(m.brawler[0] > 0.025, `brawler effect ${m.brawler[0]}`);
+  const [bs, bw] = m.brawler[0];
+  assert.ok(bs / bw > 0.025, `brawler effect ${bs / bw}`);
   const s = scoreRows(maps[24], m, { K: 150 });
   assert.ok(s.find((r) => r.id === 0).score > 0.52, 'few games here, but strong everywhere: starts high');
   const one = fitModel(maps, undefined, { hierarchy: false });

@@ -223,13 +223,19 @@ function mlVar(pts, start) {
   }
   return t;
 }
-// each brawler's precision-weighted average residual across maps, shrunk toward 0
-function brawlerEffects(pts, tau2) {
+// Each brawler's strength across maps: its precision-weighted average residual, shrunk toward 0.
+// On a given map it leaves that map out, so a map's own games aren't counted twice
+// (once as evidence, once inside the starting value).
+function brawlerSums(pts, tau2) {
   const by = new Map();
   for (const p of pts) { const v = 0.25 / p.w + tau2, e = by.get(p.id) || { s: 0, w: 0 }; e.s += p.res / v; e.w += 1 / v; by.set(p.id, e); }
-  const es = [...by].map(([id, e]) => ({ id, y: e.s / e.w, v: 1 / e.w }));
-  const tB = mlVar(es, 1e-4);
-  return { tauB2: tB, eff: new Map(es.map((e) => [e.id, (e.y * tB) / (tB + e.v)])) };
+  const tauB2 = mlVar([...by.values()].map((e) => ({ y: e.s / e.w, v: 1 / e.w })), 1e-4);
+  return { by, tauB2 };
+}
+function leaveOut(e, tauB2, res, v) {
+  if (!e) return 0;
+  const s = e.s - (res == null ? 0 : res / v), w = e.w - (res == null ? 0 : 1 / v);
+  return w > 1e-9 ? ((s / w) * tauB2) / (tauB2 + 1 / w) : 0;
 }
 export function fitModel(maps, feature = presence, { hierarchy = true } = {}) {
   const pts = [];
@@ -245,19 +251,35 @@ export function fitModel(maps, feature = presence, { hierarchy = true } = {}) {
   const slope = Math.min(0.04, Math.max(0, vx > 1e-9 ? (sxy - (sx * sy) / sw) / vx : 0));
   const intercept = sy / sw - slope * (sx / sw); // weighted line through the data's centre
   for (const p of pts) p.res = p.y - intercept - slope * p.x;
-  const mapLevel = (shift) => mlVar(pts.map((p) => ({ y: p.res - (shift?.get(p.id) || 0), v: 0.25 / p.w })), 0.25 / 150);
-  let tau2 = mapLevel(), brawler = new Map(), tauB2 = 0;
+  const mapLevel = (shift) => mlVar(pts.map((p, i) => ({ y: p.res - (shift ? shift[i] : 0), v: 0.25 / p.w })), 0.25 / 150);
+  let tau2 = mapLevel(), sums = null;
   if (hierarchy) {
-    // alternate: brawler effects given tau, then tau given the effects (converges in a few rounds)
-    for (let i = 0; i < 3; i++) { ({ eff: brawler, tauB2 } = brawlerEffects(pts, tau2)); tau2 = mapLevel(brawler); }
+    // alternate: brawler strengths given tau, then tau given the (leave-this-map-out) strengths
+    for (let i = 0; i < 4; i++) {
+      sums = brawlerSums(pts, tau2);
+      tau2 = mapLevel(pts.map((p) => leaveOut(sums.by.get(p.id), sums.tauB2, p.res, 0.25 / p.w + tau2)));
+    }
   }
   const K = Math.round(Math.min(600, Math.max(40, 0.25 / Math.max(tau2, 0.25 / 600))));
+  const r5 = (x) => Math.round(x * 1e7) / 1e7;
   return {
     K, slope, intercept, n: pts.length,
-    ...(hierarchy ? { brawlerSpread: Math.sqrt(tauB2), brawler: Object.fromEntries([...brawler].map(([id, e]) => [id, Math.round(e * 1e5) / 1e5])) } : {}),
+    ...(hierarchy ? {
+      tau2: r5(tau2), brawlerSpread: Math.sqrt(sums.tauB2), tauB2: r5(sums.tauB2),
+      // per brawler: [sum of residual/variance, sum of 1/variance] over maps, for leave-one-out
+      brawler: Object.fromEntries([...sums.by].map(([id, e]) => [id, [r5(e.s), r5(e.w)]])),
+    } : {}),
   };
 }
 function median(xs) { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)] ?? 0; }
+
+// The brawler's cross-map strength for one row, leaving this map's own result out.
+function crossMap(model, r, x) {
+  const e = model.brawler?.[r.id];
+  if (!e) return 0;
+  const res = r.excess / r.g - (model.intercept || 0) - model.slope * x;
+  return leaveOut({ s: e[0], w: e[1] }, model.tauB2, res, 0.25 / r.g + model.tau2);
+}
 
 // Score each brawler on one map.
 //   win   = skill-adjusted win rate, pulled toward 50% (fitted strength, no presence)
@@ -266,7 +288,8 @@ export function scoreRows(rows, scoreModel, winModel) {
   const ok = rows.filter((r) => r.g >= MIN_BRAWLER_GAMES);
   const med = median(ok.map(presence));
   return ok.map((r) => {
-    const prior = 0.5 + (scoreModel.intercept || 0) + scoreModel.slope * capX(presence(r) - med) + (scoreModel.brawler?.[r.id] || 0);
+    const x = capX(presence(r) - med);
+    const prior = 0.5 + (scoreModel.intercept || 0) + scoreModel.slope * x + crossMap(scoreModel, r, x);
     return {
       ...r,
       score: (0.5 * r.g + r.excess + scoreModel.K * prior) / (r.g + scoreModel.K),

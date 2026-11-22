@@ -60,7 +60,7 @@ study): what we know about **this brawler on every map**, and its **presence on 
 
 ```
 x      = log(pick share + ban share) - that map's median, capped at +/-2
-u      = the brawler's strength across all maps (its average result after the line, shrunk)
+u      = the brawler's strength on all the other maps (its average result after the line, shrunk)
 prior  = 0.5 + intercept + slope * x + u
 score  = (0.5 * g + excess + K * prior) / (g + K)
 points = 100 * (score - 0.5)
@@ -72,19 +72,19 @@ points = 100 * (score - 0.5)
   most games are on popular brawlers and the game-weighted average brawler is exactly 50%, so the
   line crosses 50% above x = 0. On trophy maps there are no bans and the fitted slope is clamped
   at 0 (it can't go negative).
-- `u`: each brawler's results on all maps of the family, averaged with weights that favour maps with
-  more games, then shrunk toward 0 by how much brawlers really differ (spread fitted from the data;
+- `u`: each brawler's results on the **other** maps of the family (this map is left out, so its games
+  aren't counted twice), averaged with weights that favour maps with more games, then shrunk toward 0 by how much brawlers really differ (spread fitted from the data;
   about 2.6 points on Ranked maps). A brawler strong everywhere starts higher on a map where it has
   few games, instead of starting at the map average.
 - `K` = how many games the starting value is "worth": `0.25 / tau^2`, where `tau^2` is how much a
   brawler's strength on one map varies around its starting value. With `u` in the starting value
-  that's much less, so K is larger (about 380 games on Ranked maps, Nov 22 2026; capped 40-600).
+  that's less, so K is larger (about 310 games on Ranked maps, Nov 22 2026; capped 40-600).
 - Both spreads are fitted by **maximum likelihood** (normal approximation, coin-flip noise `0.25/g`),
   alternating between the two levels until they settle. Everything is refitted on every update,
   separately for Ranked maps and trophy maps.
 
-Reading it (K = 380): with 1,000 games the brawler's own results on the map have 72% of the say;
-with 100 games the starting value has 79%. Brawlers under 10 games are not shown, and the site flags
+Reading it (K = 310): with 1,000 games the brawler's own results on the map have 76% of the say;
+with 100 games the starting value has 76%. Brawlers under 10 games are not shown, and the site flags
 under 200 games as a rough guide.
 
 ## 5. Evidence that it works (held-out test, reviewed)
@@ -108,32 +108,33 @@ Real data, Nov 14-22 2026, test days Nov 18-22 (5 days, 13-24 maps a day, 224,55
 
 | Method | Miss (points) | vs site | Top 5 | vs site |
 |---|---|---|---|---|
-| **Site: two-level, presence prior** | **2.65** | | 54.2% | |
-| Two-level, no presence | 2.76 | +0.11 +/- 0.01 | 54.5% | +0.4 +/- 0.2 |
-| One level (the site until Nov 22) | 2.87 | +0.22 +/- 0.03 | 53.8% | -0.3 +/- 0.1 |
-| One level, a quarter of the fitted K | 3.11 | +0.46 +/- 0.23 | 54.5% | +0.3 +/- 0.3 |
-| One level, shrink toward 50% | 2.99 | +0.34 +/- 0.04 | 53.9% | -0.2 +/- 0.2 |
-| One level, before the intercept fix | 2.98 | +0.33 +/- 0.03 | 53.9% | -0.2 +/- 0.1 |
-| Fixed: 40 games toward 50% | 3.46 | +0.81 +/- 0.27 | 54.6% | +0.4 +/- 0.5 |
-| Raw win rate (10+ games) | 5.08 | +2.43 +/- 1.17 | 53.7% | -0.5 +/- 1.1 |
-| Teammate-adjusted (RAPM, ridge 50) | n/a | | 54.6% | +0.4 +/- 0.5 |
-| Most picked | n/a | | 51.4% | -2.8 +/- 0.6 |
+| **Site: two-level, presence prior** | **2.67** | | 54.1% | |
+| Two-level, no presence | 2.78 | +0.10 +/- 0.01 | 54.5% | +0.3 +/- 0.2 |
+| One level (the site until Nov 22) | 2.87 | +0.19 +/- 0.02 | 53.8% | -0.3 +/- 0.1 |
+| Two-level, a quarter of the fitted K | 3.23 | +0.56 +/- 0.29 | 54.5% | +0.4 +/- 0.3 |
+| One level, shrink toward 50% | 2.99 | +0.32 +/- 0.03 | 53.9% | -0.2 +/- 0.2 |
+| One level, before the intercept fix | 2.98 | +0.31 +/- 0.02 | 53.9% | -0.2 +/- 0.1 |
+| Fixed: 40 games toward 50% | 3.46 | +0.79 +/- 0.26 | 54.6% | +0.5 +/- 0.5 |
+| Raw win rate (10+ games) | 5.08 | +2.41 +/- 1.16 | 53.7% | -0.4 +/- 1.2 |
+| Teammate-adjusted (RAPM, ridge 50) | n/a | | 54.6% | +0.5 +/- 0.5 |
+| Most picked | n/a | | 51.4% | -2.7 +/- 0.6 |
 
 What this shows:
 
 - **Points**: the site's estimate misses a brawler's true win rate by about 2.7 points, against
-  5.1 for raw win rates (48% smaller). It has the lowest miss of the methods tested and beats each
+  5.1 for raw win rates (47% smaller). It has the lowest miss of the methods tested and beats each
   one on at least 4 of 5 days (the one-level version on all 5).
 - **Top 5**: the two-level model also picks better top 5s than the one-level site it replaced
-  (+0.3 +/- 0.1). Dropping presence, pulling less, or teammate adjustment score a little higher on
+  (+0.3 +/- 0.1, better on 5 of 5 days for the miss). Dropping presence, pulling less, or teammate adjustment score a little higher on
   the top-5 test but within about 2 standard errors, and their points are less accurate; we keep the
   method whose points are most accurate and re-test as days accumulate.
 - **Teammate adjustment** (RAPM: each team's skill-adjusted result split across its three members
   by ridge regression, as in basketball plus-minus; Sill 2010) gives no calibrated rate and no clear
   gain, so it isn't used.
 - **Trophy-game maps** (50 of 76 maps; `TEST_MIN=40 node scripts/score-lab.mjs t`): special events
-  rotate, so only 1-21 of them have enough games on a given test day (30,563 test games): miss 1.73
-  for the site vs 1.83 one-level and 4.62 raw. Rarely played event maps can't be tested yet. (No map
+  rotate, so only 1-21 of them have enough games on a given test day (30,563 test games): miss 1.61
+  for the site vs 1.83 one-level (better on 4 of 5 days, but +0.21 +/- 0.25 is within noise) and
+  4.62 raw. Rarely played event maps can't be tested yet. (No map
   currently uses the mixed Ranked + trophy basis.)
 
 Reviews (Nov 22 2026). Both were done by AI reviewers working in this project, not by an outside
@@ -148,7 +149,10 @@ statistician; this document, the code and `score-lab.mjs` are public so anyone c
    hierarchical partial pooling, player-effect models, Dota 2 skill-confounding studies). It judged
    the method sound with caveats: player-effect and matchup models need per-player game data that
    the day files don't keep. It proposed the cross-map brawler level and maximum-likelihood
-   variances, which won every test day and are now the site's method.
+   variances, which beat the one-level model on every Ranked test day and are now the site's method.
+   A follow-up check of the implementation found that a map's own games were also inside its
+   brawler's cross-map strength, which made K and the uncertainty look better than they are; the
+   strength now leaves the scored map out (K went from ~380 to ~310, accuracy unchanged).
 
 ## 6. Limitations (what this does not do)
 
@@ -158,8 +162,8 @@ statistician; this document, the code and `score-lab.mjs` are public so anyone c
   detect this, because training and test days share the same players.
 - **Opponents and matchups** are averaged over, not modelled.
 - **Uncertainty**: the site shows the game count as the confidence signal. As a rough guide the
-  standard error of a score is `50 / sqrt(g + K)` points (+/-1.3 at 1,000 games with K = 380,
-  +/-2.3 at 100). That ignores uncertainty in K and the prior, and the same players repeat a
+  standard error of a score is `50 / sqrt(g + K)` points (+/-1.4 at 1,000 games with K = 310,
+  +/-2.5 at 100). That ignores uncertainty in K and the prior, and the same players repeat a
   brawler: results on odd vs even days vary 1.22x as much as coin flips alone would (an upper
   bound, as real day-to-day change adds to it), so true uncertainty is somewhat larger.
 - **Time**: the 14-day window treats every day the same; balance changes reset a brawler's games
