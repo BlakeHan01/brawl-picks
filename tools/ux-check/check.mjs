@@ -131,6 +131,9 @@ async function dialogPattern(p, label, openSel, dialogSel) {
     check('Enter opens the map', (await hash(p)).startsWith('#m-'));
     check('Map page: back link says "Home"', (await p.textContent('#mapView .back')).includes('Home'));
     await audit(p, 'Map page');
+    await p.click('#mapView .top5 .bname >> nth=0'); await settle(p, 200);
+    check('Card opened from a map shows that map\'s evidence (tier, rank, games)', await p.evaluate((name) => { const h = document.querySelector('#bpop .bp-here-h'); return !!h && h.textContent.includes(name) && /games/.test(document.querySelector('#bpop .bp-here-ev').textContent) && !document.querySelector('#bpop .bp-tiles'); }, rankedMap.name));
+    await p.keyboard.press('Escape'); await settle(p, 150);
     let tt = await tooltipOnTop(p, '#mapView .top5 .bi');
     check('Map page: build tooltip shows on top', tt === 'ok', tt);
     await p.mouse.click(5, 5); await settle(p, 100);
@@ -198,6 +201,12 @@ async function dialogPattern(p, label, openSel, dialogSel) {
       await p.click('#mapView .back'); await settle(p);
       check('Back from Balance changes goes home', await visible(p, '#searchView'));
     }
+
+    // ===== 3c. How we rank =====
+    await p.goto(BASE); await settle(p, 700);
+    await p.click('#foot a[href="#method"]'); await settle(p);
+    check('Footer link opens How we rank', (await hash(p)) === '#method' && (await p.textContent('#mapView h1')) === 'How we rank');
+    await audit(p, 'How we rank');
 
     // ===== 4. Account dialog =====
     await p.goto(BASE + `#m-${rankedMap.id}`); await settle(p, 800);

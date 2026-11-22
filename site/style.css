@@ -607,3 +607,21 @@ details.legend p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); max-wi
 .rest .wr { display: flex; justify-content: flex-end; }
 .bp-maps .tier.sm { margin-left: 2px; }
 .barwrap.empty { background: none; }
+/* brawler card: this map's evidence */
+.bp-here { display: flex; gap: 12px; align-items: flex-start; background: var(--bg); border-radius: 12px; padding: 10px 12px; }
+.bp-here > div { min-width: 0; display: grid; gap: 3px; }
+.bp-here-h { margin: 0; font-weight: 800; font-size: 14px; }
+.bp-here-ev { margin: 0; font-size: 12.5px; color: var(--dim); }
+.bp-here-ev b { color: var(--warn); font-weight: 700; }
+.bp-here-mine { margin: 2px 0 0; font-size: 12.5px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+.bp-here.none { margin: 0; color: var(--dim); font-size: 13px; display: block; }
+/* How we rank */
+.mth h2 { margin-top: 22px; }
+.mth p { color: var(--text); font-size: 14.5px; line-height: 1.55; max-width: 66ch; margin: 0 0 8px; }
+.mth p a, .bp-basis a { color: var(--accent); }
+.mth-tiers { display: grid; gap: 6px; margin: 8px 0 10px; max-width: 420px; }
+.mth-tiers div { display: flex; align-items: center; gap: 10px; background: var(--panel); border-radius: 10px; padding: 6px 10px; font-size: 14px; }
+.mth-tiers small { color: var(--dim); }
+.bp-basis { margin: 8px 0 0; font-size: 12.5px; color: var(--dim); }
+details.legend p a { color: var(--accent); }
+.bp-here .tier { flex: none; }
